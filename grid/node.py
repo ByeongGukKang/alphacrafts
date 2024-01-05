@@ -1,5 +1,6 @@
 import datetime as dt
 import inspect
+from time import sleep
 from threading import Thread
 from queue import Queue as ThreadQueue
 import pickle
@@ -10,11 +11,12 @@ from PyQt5.QtCore import pyqtSlot, QObject, QThread, pyqtSignal
 
 import zmq
 
-from alphacraft.bkd.share.qt import ThreadData, QtLocalClock
-from alphacraft.bkd.creon.wrapper.trade import ObjCpConclusion, _ObjCpConclusionEvent
-from alphacraft.bkd.creon.wrapper.trade import QtObjCpConclusion
-from grid.parent import GridNodeParent, GridQtNodeParent
-from grid.utils import Ledger
+from alphacrafts.bkd.share.qt import ThreadData, QtLocalClock
+from alphacrafts.bkd.creon.wrapper.account import ObjCpCybos 
+from alphacrafts.bkd.creon.wrapper.trade import ObjCpTdUtil, ObjCpTd0311
+from alphacrafts.bkd.creon.wrapper.trade import ObjCpConclusion, _ObjCpConclusionEvent, QtObjCpConclusion
+from alphacrafts.grid.parent import GridNodeParent, GridQtNodeParent
+from alphacrafts.grid.utils import Ledger
 
 
 # Qtworkers in DataQtNode are synchronized by its local clock
@@ -92,8 +94,8 @@ class SignalNode(GridNodeParent):
         super().start(self)
 
         # start threads
-        self._threads["send_order"][0].start()
-        self._threads["get_order_result"][0].start()
+        self._threads["thd_send_order"][0].start()
+        self._threads["thd_get_order_result"][0].start()
         self._call_lmsg(20, f"ncmd[MANAGER:start] [success]")
 
     def set_ready(self):
@@ -108,8 +110,8 @@ class SignalNode(GridNodeParent):
         self._ledger = Ledger(cash=0, codes=codes)
 
         # threads
-        self._threads["thd_order_send"] = [Thread(target=self._send_order, daemon=True), True]
-        self._threads["thd_order_result"] = [Thread(target=self._get_order_result, daemon=True), True]
+        self._threads["thd_order_send"] = [Thread(target=self._thd_send_order, daemon=True), True]
+        self._threads["thd_order_result"] = [Thread(target=self._thd_get_order_result, daemon=True), True]
 
         self._setlist["set_start"] = True
 
@@ -153,7 +155,7 @@ class SignalNode(GridNodeParent):
         self._sockets["account_node_execution"].bind(f"tcp://{ip}:{execution_port}")
 
     ### Threads ###
-    def _send_order(self):
+    def _thd_send_order(self):
         while True:
             if self._threads["thd_order_send"][1]:
                 [topic, data] = self._socket_data_node.recv_multipart()
@@ -212,19 +214,19 @@ class SignalNode(GridNodeParent):
                         # rev_data = pickle.loads(rev_data)
                         # self._ledger.update_cash(rev_data["cash"])
 
-    def _get_order_result(self):
+    def _thd_get_order_result(self):
         while True:
             if self._threads["thd_order_result"][1]:
-                # order_result is a dict with keys: "result_type", "order_type", "code", "delta_order", "order_price", "delta_position", "execute_price"
-                # result_type: "execute", "submit/adjust", "cancel/reject"
+                # order_result is a dict with keys: "conclutype", "ordtype", "code", "orddelta", "ordprc", "positdelta", "exeprc"
+                # result_type: "exe", "sub/adj", "can/rej" ("executed", "submitted"/"adjusted", "cancelled"/"rejected")
                 [identity, result] = self._sockets["account_node_execution"].recv_multipart()
                 result = pickle.loads(result) 
 
                 # Acquire ledger lock
                 with self._ledger.withlock():
-                    if result["result_type"] == "execute":
-                        self._ledger.update_cash(-result['delta_position'] * result["execute_price"])
-                        self._ledger.add_position(result['code'], result['delta_position'], result["execute_price"])
+                    if result["conclutype"] == "exe":
+                        self._ledger.update_cash(-result['positdelta'] * result["exeprc"])
+                        self._ledger.add_position(result['code'], result['positdelta'], result["exeprc"])
                     else:
                         pass
                         # TODO
@@ -264,6 +266,9 @@ class AccountWorkerCreon(QObject):
         account_numer (str): account number
         commodity_number (str): commodity number, '1':주식, '2':선물/옵션
         """
+        # Account Node instance
+        self.nodeSelf = None
+
         # Account and commodity number
         self.accnum = account_number
         self.comnum = commodity_number
@@ -273,6 +278,7 @@ class AccountWorkerCreon(QObject):
 
         # Order sign converter
         self.sign_converter = {"1":-1, "2":1}
+        self.result_type_converter = {"체결":"executed", "접수":"accepted", "확인":"confirmed", "거부":"denied"}
 
         # Real-time conclusion transaction management
         qtobj_conclusion = QtObjCpConclusion()
@@ -280,7 +286,7 @@ class AccountWorkerCreon(QObject):
         qtobj_conclusion.evt_subscribe_data.connect(self.unpack)
         obj_conclusion.subscribe(
             subscribe_key = "conclusion",
-            output_dict = {9:"code",3:"qty",4:"prc",5:"ordnum",6:"origin_ordnum",12:"trdtype",14:"conclutype"}
+            output_dict = {9:"code",3:"ordqty",4:"exeprc",5:"ordnum",6:"origin_ordnum",12:"trdtype",14:"conclutype"}
         )
 
     def add_strategy(self, identity):
@@ -292,16 +298,16 @@ class AccountWorkerCreon(QObject):
         packed_orders = []
         for order in order_request:
             if order["code"] not in self.dict_startegy[identity]["waiting"]:
-                self.dict_startegy[identity]["waiting"][order["code"]] = order["qty"]
+                self.dict_startegy[identity]["waiting"][order["code"]] = order["ordqty"]
             else:
-                self.dict_startegy[identity]["waiting"][order["code"]] += order["qty"]
+                self.dict_startegy[identity]["waiting"][order["code"]] += order["ordqty"]
             packed_order = {
-                0: str(np.sign(order["qty"])+1),
+                0: str(np.sign(order["ordqty"])+1),
                 1: self.accnum,
                 2: self.comnum,
                 3: order["code"],
-                4: abs(int(order["qty"])),
-                5: int(order["prc"]),
+                4: abs(int(order["ordqty"])),
+                5: int(order["ordprc"]),
                 7: "0",
                 8: "03",
             }
@@ -309,41 +315,17 @@ class AccountWorkerCreon(QObject):
         return packed_orders
 
     @pyqtSlot(ThreadData)
-    def unpack(self, order_result, node_self):
+    def unpack(self, order_result):
+        # ordres = {9:"code",3:"ordqty",4:"exeprc",5:"ordnum",6:"origin_ordnum",12:"trdtype",14:"conclutype"}
         ordres = order_result.data
-        node_self._queue_order_result.put_nowait(ordres)
-        # {9:"code",3:"qty",4:"prc",5:"ordnum",6:"origin_ordnum",12:"trdtype",14:"conclutype"}
-        pass
+        refined_ordres = {
+            "code": ordres["code"],
+            "conclutype": self.result_type_converter[ordres["conclutype"]],
+            "positdelta": (self.sign_converter[ordres["trdtype"]]*ordres["ordqty"]),
+            "exeprc": ordres["exeprc"],
+        }
+        self.nodeSelf._queue_order_result.put_nowait(refined_ordres)
 
-        """
-        1 - (string) 계좌명 \n
-        2 - (string) 종목명 \n
-        3 - (long) 체결수량 \n
-        4 - (long) 체결가격 \n
-        5 - (long) 주문번호 \n
-        6 - (long) 원주문번호 \n
-        7 - (string) 계좌번호 \n
-        8 - (string) 상품관리구분코드 \n 
-        9 - (string) 종목코드 \n 
-        12 - (string) 매매구분코드, 1:매도, 2:매수 \n 
-        14 - (string) 체결구분코드, 1:체결, 2:확인, 3:거부, 4:접수 \n 
-            신규 매수/매도 주문시 접수 or 거부 => 체결 \n
-            정정,취소 주문시 정정,취소 확인 => 체결 \n
-        15 - (string) 신용대출구분코드 \n 
-        16 - (string) 정정취소구분코드, 1:정상, 2:정정, 3:취소 \n
-        17 - (string) 현금신용대용구분코드, 1:현금, 2:신용, 3:선물대용, 4:공매도 \n
-        18 - (string) 주문호가구분코드 \n
-            01:보통, 02:임의, 03:시장가, 05:조건부지정가, 06:희망대량, 09:자사주, 10:스톡옵션자사주 
-            11:금전신탁자사주, 12:최유리지정가, 13:최우선지정가, 51:임의시장가, 52:임의조건부지정가
-            61:장중대량, 63:장중바스켓, 63:개시전종가, 67:개시전종가대량, 69:개시전시간외바스켓
-            71:개시전금전신탁자사주, 72:개시전대량자기, 73:신고대량(전장시가), 77:시간외대량
-            79금전신탁종가대량, 80:신고대량(종가) \n
-        19 - (string) 주문조건구분코드, 0:없음, 1:IOC, 2:FOK \n
-        20 - (string) 대출일 \n
-        21 - (long) 장부가 \n
-        22 - (long) 매도가능수량 \n
-        23 - (long) 체결기준잔고수량 \n       
-    """
 
 class QtAccountNode(GridQtNodeParent):
 
@@ -359,17 +341,25 @@ class QtAccountNode(GridQtNodeParent):
         # Order result queue
         self._queue_order_result = ThreadQueue()
 
-        # self._threads["recv_send_order"][0].start()
-        # self._threads["pub_order_result"][0].start()
-        # self._call_lmsg(20, f"ncmd[start] [Success]")
+        self._threads["thd_order_req"][0].start()
+        self._threads["thd_order_result"][0].start()
+        self._call_lmsg(20, f"ncmd[MANAGER:start] [success]")
 
     def set_ready(self):
-        self._setlist["set_signal_node"] = False
+        # self._setlist["set_signal_node"] = False
         self._setlist["set_worker"] = False
         self._setlist["set_start"] = False
         self._setlist["set_ready"] = True
 
     def set_start(self, ip, router_port, push_port, pub_port):
+        """
+
+        ip (str): ip address \n
+        router_port (int): port for router socket (receving signals) \n
+        push_port (int): port for push socket (sending orders to execution node) \n
+        pub_port (int): port for pub socket (sending order results to signal node) \n
+        
+        """
 
         # Router port to receive order request from signal node
         self._socket_router = self._context.socket(zmq.ROUTER)
@@ -387,21 +377,18 @@ class QtAccountNode(GridQtNodeParent):
         self._threads["thd_order_result"] = [Thread(target=self._thd_order_result, daemon=True), True]
 
         self._setlist["set_start"] = True
-
-    def set_signal_node(self, ip, port):
-        self.pull_socket = self._context.socket(zmq.PULL)
-        self.pull_socket.connect(f"tcp://{ip}:{port}")
-
-        self._setlist["set_signal_node"] = True
     
     def set_worker(self, worker):
         # TODO check worker type
         self._worker = worker
+        self._worker.nodeSelf = self
+
+        self._setlist["set_worker"] = True
 
     ### Threads ###
 
     def _thd_order_req(self):
-        while self._threads["recv_send_order"][1]:
+        while self._threads["thd_order_req"][1]:
             [identity, order_request] = self._socket_router.recv_multipart()
             self._socket_router.send_multipart([identity, "success".encode("utf-8")]) # send success message to signal node)
             order_request = pickle.loads(order_request)
@@ -411,7 +398,7 @@ class QtAccountNode(GridQtNodeParent):
                 self._socket_push.send_pyobj(order)
 
     def _thd_order_result(self):
-        while self._threads["pub_order_result"][1]:
+        while self._threads["thd_order_result"][1]:
             # If empty queue then pass
             if self._queue_order_result.empty():
                 pass
@@ -430,7 +417,7 @@ class QtAccountNode(GridQtNodeParent):
                         pass
                     elif len(strategy_with_order) == 1:
                         # size and sign of conclued order
-                        delta_order = (self._worker.sign_converter[ordres["trdtype"]] * ordres["qty"])
+                        delta_order = (self._worker.sign_converter[ordres["trdtype"]] * ordres["ordqty"])
                         # handle waiting order dictionary
                         self._worker.dict_startegy[strategy_with_order[0]]["waiting"][ordres["code"]] -= delta_order
                         if self._worker.dict_startegy[strategy_with_order[0]]["waiting"][ordres["code"]] == 0:
@@ -442,7 +429,10 @@ class QtAccountNode(GridQtNodeParent):
                             self._worker.dict_startegy[strategy_with_order[0]]["submitted"][ordres["code"]] -= delta_order
                     else:
                         # TODO mutiple strategy in a single account
-                        # Proper order distrubution algorithmn is needed
+                        # We need an algorithmn to figure out where this order result should go (which signal node?)
+                        # For FIFO, we need to use queue for order request per stock
+                        # For quantitty based (most easy)
+                        # For fair-share, we need to use some kind of weight (most difficult, consider both time and quantity)
                         pass
 
                 elif ordres["conclutype"] == "체결":
@@ -450,28 +440,101 @@ class QtAccountNode(GridQtNodeParent):
                     for identity, indict in self._worker.dict_startegy.items():
                         if ordres["code"] in indict["waiting"]:
                             strategy_with_order.append(identity)
-                        
 
-                    pass
+                    if len(strategy_with_order) == 0:
+                        # TODO some error handling
+                        pass
+                    elif len(strategy_with_order) == 1:
+                        # size and sign of conclued order
+                        delta_order = (self._worker.sign_converter[ordres["trdtype"]] * ordres["ordqty"])
+                        # handle submitted order dictionary
+                        self._worker.dict_startegy[strategy_with_order[0]]["submitted"][ordres["code"]] -= delta_order
+                        if self._worker.dict_startegy[strategy_with_order[0]]["submitted"][ordres["code"]] == 0:
+                            del self._worker.dict_startegy[strategy_with_order[0]]["submitted"][ordres["code"]]
+                        # send order result to signal node
+                        self._socket_pub.send_multipart([strategy_with_order[0], pickle.dumps(ordres)])
+
+                    else:
+                        # TODO mutiple strategy in a single account
+                        # Proper order distrubution algorithmn is needed
+                        pass
 
                 else:
-                    if ordres["conclutype"] == "확인":
+                    if ordres["conclutype"] == "거부":
                         # TODO some error handling
                         pass
                     # TODO some error handling
                     pass
                     
                 
+class ExecutionWorkerCreon:
 
-    # def _thd_order_result(self):
-    #     while self._threads["pub_order_result"][1]:
-    #         order_result = self._worker.get_result()
-    #         # TODO 
-    #         # We need an algorithmn to figure out where this order result should go (which signal node?)
-    #         # For FIFO, we need to use queue for order request per stock
-    #         # For quantitty based (most easy)
-    #         # For fair-share, we need to use some kind of weight (most difficult, consider both time and quantity)
+    def __init__(self):
+        self._obj_limit = ObjCpCybos
+        self._obj_trade = ObjCpTd0311
 
-    #         order_result_list = self._worker.unpack(order_result) # Here we unpack order result and allocate it to each signal node
-    #         for result in order_result_list: # result is tuple with (identity, order_result)
-    #             self._socket_pub.send_multipart([result[0], result[1]])
+        self._ordtype_converter = {'1':"sell",'2':"buy"}
+
+    def check_limit(self):
+        remain_count = self._obj_limit.get_remain_count(0)
+        if remain_count > 0:
+            pass
+        else:
+            sleep(self._obj_limit.get_refresh_time(0) / 1000)
+
+    def execute_order(self, ordreq):
+        ObjCpTdUtil.init()
+        self._obj_trade.set_input(ordreq)
+        self._obj_trade.blockrequest()
+        header = self._obj_trade.get_header(
+            {
+                0:"ordtype",1:"accnum",2:"comnum",3:"code",4:"ordqty",5:"ordprc",
+                8:"ordnum",9:"accname",10:"codename",12:"ordcond",13:"ordcall"
+            }
+        )
+
+
+class ExecutionNode(GridNodeParent):
+
+    _node_type = "ExecutionNode"
+
+    ### Commands ###
+
+    ### Main ###
+    def start(self):
+        # check settings before start
+        super().start(self)
+
+        # start threads
+        self._threads["thd_rev_order"][0].start()
+        self._call_lmsg(20, f"ncmd[MANAGER:start] [success]")
+
+    def set_ready(self):
+        self._setlist["set_worker"] = False
+        self._setlist["set_start"] = False
+        self._setlist["set_ready"] = True
+
+    def set_start(self, account_node_ip, account_node_push_port):
+        # Pull port to receive order request from account node
+        self._socket_pull = self._context.socket(zmq.PULL)
+        self._socket_pull.bind(f"tcp://{account_node_ip}:{account_node_push_port}")
+
+        # threads
+        self._threads["thd_order_execute"] = [Thread(target=self._thd_order_execute, daemon=True), True]
+
+        self._setlist["set_start"] = True
+
+    def set_worker(self, worker):
+        self._worker = worker
+
+    ### Threads ###
+    def _thd_order_execute(self):
+        while True:
+            if self._threads["thd_order_execute"][1]:
+                self._worker.check_limit()
+                order_request = self._socket_pull.recv_pyobj()
+                self._worker.execute_order(order_request)
+
+                
+
+    
