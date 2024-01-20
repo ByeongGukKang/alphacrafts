@@ -1,3 +1,4 @@
+import asyncio
 import datetime as dt
 import inspect
 from time import sleep
@@ -7,6 +8,7 @@ import pickle
 
 import numpy as np
 
+from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import pyqtSlot, QObject, QThread, pyqtSignal
 
 import zmq
@@ -27,6 +29,11 @@ class QtDataNode(GridQtNodeParent):
 
     _node_type = "DataQtNode"
 
+
+    ### Network ###
+    async def _net_pub_data(self, data):
+        await self._socket_data_pub.send_pyobj(data)
+
     ### Commands ###
 
     def _ncmd_clockoff(self, *args):
@@ -36,20 +43,54 @@ class QtDataNode(GridQtNodeParent):
         self.qt_local_clock.time_stop = args[0]
         self._call_lmsg(20, f"ncmd[MANAGER:clockoff] [success] {args[0]}")
 
+    def _ncmd_shutdown(self):
+        """
+        Shutdown node
+        """
+        # Stop all threads
+        self._threads["thd_master"][1] = False
+        self.qt_local_clock.go_flag = False
+        self.qt_local_clock.quit()
+        # Disconnect all signals
+        for worker_name, worker in self.workers.items():
+            self.qt_local_clock.evt_local_time.disconnect(worker.get_data)
+            worker.evt_market_data.disconnect(self.workers_slot[worker_name])
+        # Closing message
+        self._call_lmsg(20, f"ncmd[MANAGER:shutdown] [success]")
+        # Close the program
+        import sys
+        QApplication.quit()
+        sys.exit(0)
+    
+    def _ncmd_set_identity(self, *args):
+        super()._ncmd_set_identity(*args)
+        
     ### Main ###
     def start(self): # Must Defined
+        # check settings before start
+        super().start()
+
+        # start threads
         self.qt_local_clock.start()
-        for worker_name in self.workers:
-            self.workers[worker_name].start()
-            self.workers[worker_name].data.connect(self.workers_slot[worker_name])
+        # This is for not Qt workers
+        for worker_name, worker in self.workers.items():
+            self.qt_local_clock.evt_local_time.connect(worker.get_data)
+            worker.evt_market_data.connect(self.workers_slot[worker_name])
         self._call_lmsg(20, f"ncmd[MANAGER:start] [success]")
+
+    def set_ready(self):
+        self._setlist["set_worker"] = False
+        self._setlist["set_clock_frequency"] = False
+        self._setlist["set_start"] = False
+        self._setlist["set_ready"] = True
 
     def set_start(self, ip, data_pub_port, func_agg_memory):
         self._socket_data_pub = self._context.socket(zmq.PUB)
         self._socket_data_pub.setsockopt(zmq.CONFLATE, True)
         self._socket_data_pub.bind(f"tcp://{ip}:{data_pub_port}")
 
-        self.qt_local_clock = QtLocalClock()  # qt_local_clock
+        # qt_local_clock - synchronize qt_workers
+        self.qt_local_clock = QtLocalClock()  
         # qt_workers - emit data
         self.workers = {}  
         # pystSlots - receive data from qt_workers
@@ -59,27 +100,37 @@ class QtDataNode(GridQtNodeParent):
         # if the memory is full, then aggregate the memory and publish it
         self._func_agg_memory = func_agg_memory
 
+        self._setlist["set_start"] = True
+
     def set_clock_frequency(self, frequency):
+        """
+        frequency (int): frequency of clock in ms
+        """
+        if not self._setlist["set_start"]:
+            raise Exception("set_state must be called before set_clock_frequency")
         self.qt_local_clock.set_freq(frequency)
+
+        self._setlist["set_clock_frequency"] = True
 
     def set_worker(self, worker_name, worker):
         """
         worker_name (str): name of worker
         worker : an instance of QtObserver 
         """
-        if worker_name == "master":
-            raise ValueError("name 'master' is for master thread")
         if not (isinstance(worker, QThread) or isinstance(worker, QObject)):
             raise TypeError("worker must be an instance fro, 'QThread' or 'QObject'")
         self.workers[worker_name] = worker
         self.workers_slot[worker_name] = pyqtSlot(ThreadData)(lambda data: self.update_meory(worker_name, data))
 
+        self._setlist["set_worker"] = True
+
     def update_meory(self, worker_name, data):
         self.workers_memory[worker_name] = data
 
         if len(self.workers_memory) == len(self.workers):
-            self._socket_data_pub.send_pyobj(self._func_agg_memory(self.workers_memory))
+            asyncio.run(self._net_pub_data(self._func_agg_memory(self.workers_memory)))
             self.workers_memory = {}
+
 
 
 class SignalNode(GridNodeParent):
@@ -91,7 +142,7 @@ class SignalNode(GridNodeParent):
     ### Main ###
     def start(self):
         # check settings before start
-        super().start(self)
+        super().start()
 
         # start threads
         self._threads["thd_send_order"][0].start()
@@ -336,7 +387,7 @@ class QtAccountNode(GridQtNodeParent):
     ### Main ###
     def start(self):
         # check settings before start
-        super().start(self)
+        super().start()
 
         # Order result queue
         self._queue_order_result = ThreadQueue()
@@ -503,7 +554,7 @@ class ExecutionNode(GridNodeParent):
     ### Main ###
     def start(self):
         # check settings before start
-        super().start(self)
+        super().start()
 
         # start threads
         self._threads["thd_rev_order"][0].start()

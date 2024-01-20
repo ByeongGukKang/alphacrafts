@@ -50,17 +50,15 @@ class QtLocalClock(QThread):
     def __init__(self):
         super().__init__()
         self.freq = 500
+        self.go_flag = True
 
-        self.time_stop = False
-
-    def set_freq(self, ms):
+    def set_freq(self, ms=500):
         self.freq = ms
 
     def run(self):
-        while True:
-            if not self.time_stop:
-                print(datetime.now())
-                self.evt_local_time.emit(datetime.now())
+        while self.go_flag:
+            # print(datetime.now())
+            self.evt_local_time.emit(datetime.now())
             QTest.qWait(self.freq)
 
     @pyqtSlot(bool)

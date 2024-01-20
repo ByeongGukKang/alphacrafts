@@ -22,6 +22,17 @@ class SlackBot:
         channel_id = channel["id"]
         return channel_id
 
+    def get_last_message(self, channel_id):
+        """
+        슬랙 채널 내 메세지 조회
+        """
+        # conversations_history() 메서드 호출
+        result = self.__client.conversations_history(channel=channel_id)
+        # 채널 내 메세지 정보 딕셔너리 리스트
+        messages = result.data['messages']
+
+        return messages[0]['text'] # 가장 최근의 텍스트 반환
+
     def get_message_ts(self, channel_id, query):
         """
         슬랙 채널 내 메세지 조회

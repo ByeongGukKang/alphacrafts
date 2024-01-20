@@ -46,14 +46,17 @@ class GridManager:
 
     ### Main ###
     def start(self):
-        self._messanger.post_channel_message(self._slack_channel_id, "###  Alphacrafts GridManager is Ready ###")
-        self._messanger.post_channel_message(self._slack_channel_id, "-->")
-        self._threads["slack"] = [Thread(target=self._thd_slack), True] # main thread
-        self._threads["zmq"] = [Thread(target=self._thd_zmq, daemon=True), True]
-        self._threads["slack"][0].start()
-        self._threads["zmq"][0].start()
-        self._call_log(20, "call[USER:START] [success]")
-
+        try:
+            self._messanger.post_channel_message(self._slack_channel_id, "###  Alphacrafts GridManager is Ready ###")
+            self._messanger.post_channel_message(self._slack_channel_id, "-->")
+            self._threads["slack"] = [Thread(target=self._thd_slack), True] # main thread
+            self._threads["zmq"] = [Thread(target=self._thd_zmq, daemon=True), True]
+            self._threads["slack"][0].start()
+            self._threads["zmq"][0].start()
+            self._call_log(20, "call[USER:START] [success]")
+        except Exception as e:
+            self._call_log(40, f"call[USER:START] [fail] {e}")
+            sys.exit(1)
 
     ### Threads ###
         
@@ -109,10 +112,19 @@ class GridManager:
 
                 elif command_type == "ncmd":
                     try:
-                        if command_args[0] not in self._nodes:
-                            self._call_lmsg(30, f"ncmd[USER:{command}] [fail] identity not found")
+                        if command == "help":
+                            getattr(self, f"_ncmd_{command}")()
                         else:
-                            getattr(self, f"_ncmd_{command}")(command_args[0], *command_args[1:])
+                            if command_args[0] not in self._nodes:
+                                self._call_lmsg(30, f"ncmd[USER:{command}] [fail] identity not found")
+                            else:
+                                if len(command_args) == 1:
+                                    try:
+                                        getattr(self, f"_ncmd_{command}")(command_args[0])
+                                    except Exception as e:
+                                        print(1234, e)
+                                else:
+                                    getattr(self, f"_ncmd_{command}")(command_args[0], *command_args[1:])
                     except Exception as e:
                         self._call_lmsg(30, f"ncmd[USER:{command}] [fail] {e}")
                     else:
@@ -139,7 +151,6 @@ class GridManager:
             else:
                 self._call_log(20, f"ncall[{identity}:{command_and_args['ncall']}] [success]")
 
-
     ### Network ###
     # methods for zmq socket
     async def _pub_send(self, identity, data):
@@ -147,9 +158,7 @@ class GridManager:
         identity (str): identity of node \n
         data (python object): data to send 
         """
-        [identity, data] = await self._pub_socket.send_multipart([identity.encode("utf-8"), pickle.dumps(data)])
-        identity, data = identity.decode("utf-8"), pickle.loads(data)
-        return identity, data
+        await self._pub_socket.send_multipart([identity.encode("utf-8"), pickle.dumps(data)])
         
     async def _router_send(self, identity, data):
         """
@@ -215,6 +224,8 @@ class GridManager:
         self._logger.log(args[0], f"ncall[{identity}:msg] [success] {args[1]}")
         self._messanger.post_channel_message(self._slack_channel_id, f"ncall[{identity}:msg]: {args[1]}")
         self._messanger.post_channel_message(self._slack_channel_id, "-->")
+        asyncio.run(self._router_send(identity, {"identity":identity, "status":"success"}))
+        print("send")
 
     def _ncall_connect(self, identity, *args):
         """
@@ -223,12 +234,12 @@ class GridManager:
         args[1] (str): type of node \n
         """
         if args[0] not in self._nodes:
-            self._nodes[identity] = {"type":args[0], "status":"ready"}
-            asyncio.run(self._router_send(identity, "success"))
-            self._call_log(20, f"ncall[{identity}:connect] [success]")
+            self._nodes[args[0]] = {"type":args[1], "status":"ready"}
+            asyncio.run(self._router_send(identity, {"identity":identity, "status":"success"}))
         else:
-            asyncio.run(self._router_send(identity, "fail"))
-            self._call_lmsg(40, f"ncall[{identity}:connect] [fail] identity already exist")
+            self._nodes[identity] = {"type":args[1], "status":"waiting"}
+            asyncio.run(self._router_send(identity, {"identity":identity, "status":"fail"}))
+            raise Exception("identity already exists")
 
     ## cmd Commands
     # cmd commands MUST END with call commands, except for special commands
@@ -282,7 +293,7 @@ class GridManager:
         self._call_msg(" ".join(arg for arg in args))
 
     ## ncmd Commands
-    # ncmd commands MUST END with ncall commands, except for special commands
+    # ncmd commands do not have to end with need self._call_return()
         
     def _ncmd_help(self, *args):
         if len(args) == 0:
@@ -309,27 +320,25 @@ class GridManager:
                 """
             )
 
-    def _ncmd_start(self, identity, *args):
+    def _ncmd_start(self, identity):
         """
         identity (str): identity of node
         """
         asyncio.run(self._pub_send(identity, {"ncmd": "start", "args":['']}))
-        self._call_return()
 
-    def _ncmd_shutdown(self, identity, *args):
+    def _ncmd_shutdown(self, identity):
         """
         identity (str): identity of node \n
         """
         asyncio.run(self._pub_send(identity, {"ncmd": "shutdown", "args":['']}))
         del(self._nodes[identity])
-        self._call_return()
 
-    # _cmd_necho is special cmd command that does not need self._call_return()
+
     def _ncmd_echo(self, identity, *args):
         """
         identity (str): identity of node\n
         args[0] (str): echo message
         """
-        asyncio.run(self._pub_send(identity, {"ncmd": "echo", "args":args[0]}))
+        asyncio.run(self._pub_send(identity, {"ncmd": "echo", "args":args}))
 
 
