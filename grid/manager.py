@@ -225,7 +225,6 @@ class GridManager:
         self._messanger.post_channel_message(self._slack_channel_id, f"ncall[{identity}:msg]: {args[1]}")
         self._messanger.post_channel_message(self._slack_channel_id, "-->")
         asyncio.run(self._router_send(identity, {"identity":identity, "status":"success"}))
-        print("send")
 
     def _ncall_connect(self, identity, *args):
         """
