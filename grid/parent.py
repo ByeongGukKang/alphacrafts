@@ -40,6 +40,8 @@ class GridNodeParent:
         self._threads = {} # {thread_name: (threading.Thread, stopflag)}
 
         ### Details
+        self._master_ip = master_ip
+        self._master_router_port = master_router_port
         self._identity = identity # name of the node, must be unique
 
         # Initialize sockets with random identity
@@ -59,7 +61,9 @@ class GridNodeParent:
         )
         res = asyncio.run(self._router_recv())
         if res["status"] == "success":
+            self._sockets["manager_router"] = self._context.socket(zmq.DEALER) # connect to master router socket as dealer
             self._sockets["manager_router"].setsockopt(zmq.IDENTITY, self._identity.encode("utf-8")) # Change identity
+            self._sockets["manager_router"].connect(f"tcp://{self._master_ip}:{self._master_router_port}")
             self._sockets["manager_pub"].setsockopt_string(zmq.SUBSCRIBE, self._identity)
             self._call_log(20, f"ncall[{self._identity}:connect] [success]")
         else:
@@ -161,7 +165,9 @@ class GridNodeParent:
         arg[0] (str): new identity \n
         """
         self._identity = arg[0]
+        self._sockets["manager_router"] = self._context.socket(zmq.DEALER) # connect to master router socket as dealer
         self._sockets["manager_router"].setsockopt(zmq.IDENTITY, self._identity.encode("utf-8")) # Change identity
+        self._sockets["manager_router"].connect(f"tcp://{self._master_ip}:{self._master_router_port}")
         self._sockets["manager_pub"].setsockopt_string(zmq.SUBSCRIBE, self._identity)
         self._call_lmsg(20, f"ncmd[MANAGER:setid] [success]")
 
@@ -243,6 +249,8 @@ class GridQtNodeParent(QMainWindow):
         self._threads = {} # {thread_name: (threading.Thread, stopflag)}
 
         ### Details
+        self._master_ip = master_ip
+        self._master_router_port = master_router_port
         self._identity = identity # name of the node, must be unique
 
         # Initialize sockets with random identity
@@ -262,7 +270,10 @@ class GridQtNodeParent(QMainWindow):
         )
         res = asyncio.run(self._router_recv()) # res = {"identity":identity, "status":"success/fail"}
         if res["status"] == "success":
+            self._sockets["manager_router"] = self._context.socket(zmq.DEALER) # connect to master router socket as dealer
             self._sockets["manager_router"].setsockopt(zmq.IDENTITY, self._identity.encode("utf-8")) # Change identity
+            self._sockets["manager_router"].connect(f"tcp://{self._master_ip}:{self._master_router_port}")
+
             self._sockets["manager_pub"].setsockopt_string(zmq.SUBSCRIBE, self._identity)
             self._call_log(20, f"ncall[{self._identity}:connect] [success]")
         else:
@@ -366,6 +377,8 @@ class GridQtNodeParent(QMainWindow):
         arg[0] (str): new identity \n
         """
         self._identity = arg[0]
+        self._sockets["manager_router"] = self._context.socket(zmq.DEALER) # connect to master router socket as dealer
         self._sockets["manager_router"].setsockopt(zmq.IDENTITY, self._identity.encode("utf-8")) # Change identity
+        self._sockets["manager_router"].connect(f"tcp://{self._master_ip}:{self._master_router_port}")
         self._sockets["manager_pub"].setsockopt_unicode(zmq.SUBSCRIBE, self._identity)
         self._call_lmsg(20, f"ncmd[MANAGER:setid] [success]")

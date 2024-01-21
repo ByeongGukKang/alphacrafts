@@ -86,12 +86,12 @@ class GridManager:
                     isWrongSyntax = True
                 else:
                     command_and_args = parts[1].split('(')
-                    if len(command_and_args) == 1:
+                    if len(command_and_args) != 2:
                         isWrongSyntax = True
                 
                 # If syntax is wrong, ignore the command
                 if isWrongSyntax:
-                    self._call_log(20, f"cmd[USER:INPUT] [ignored] {message}")
+                    self._call_log(20, f"cmd[USER:INPUT] {message} [ignored]")
                     continue
             
                 # Parsed command & arguments
@@ -119,10 +119,7 @@ class GridManager:
                                 self._call_lmsg(30, f"ncmd[USER:{command}] [fail] identity not found")
                             else:
                                 if len(command_args) == 1:
-                                    try:
-                                        getattr(self, f"_ncmd_{command}")(command_args[0])
-                                    except Exception as e:
-                                        print(1234, e)
+                                    getattr(self, f"_ncmd_{command}")(command_args[0])
                                 else:
                                     getattr(self, f"_ncmd_{command}")(command_args[0], *command_args[1:])
                     except Exception as e:
