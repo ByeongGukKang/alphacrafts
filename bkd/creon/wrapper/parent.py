@@ -34,13 +34,13 @@ class RequestEventReceiverParent:
         self.obj = objEvent
         handler = win32com.client.WithEvents(self.obj, objEventHandler)
 
-    def message_pump(self, timeout):
+    def message_pump(self, timeout:int):
         waitables = [self.StopEvent]
         while True:
             rc = win32event.MsgWaitForMultipleObjects(
                 waitables,
                 0,  # Wait for all = false, so it waits for anyone
-                timeout, # (or win32event.INFINITE)
+                int(timeout), # (or win32event.INFINITE)
                 win32event.QS_ALLEVENTS)  # Accepts all input
     
             if rc == win32event.WAIT_OBJECT_0:
@@ -51,6 +51,7 @@ class RequestEventReceiverParent:
                     break
 
             elif rc == win32event.WAIT_TIMEOUT:
+                # TODO: raise timeout error
                 print('timeout')
                 return
             
@@ -171,7 +172,7 @@ class DiscreteObserverParent(metaclass=ABCMeta):
     def set_input(self):
         pass
 
-    def request(self, timeout=5000):
+    def request(self, timeout:int=5000):
         self.obj.Request()
         self.obj_rqrev.message_pump(timeout)
 
