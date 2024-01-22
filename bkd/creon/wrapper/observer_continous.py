@@ -1,5 +1,5 @@
 
-from PyQt5.QtCore import pyqtSignal
+from PySide2.QtCore import Signal as QSignal
 import win32com.client
 
 from alphacrafts.bkd.share.qt import ThreadData
@@ -8,7 +8,7 @@ from alphacrafts.bkd.creon.wrapper.parent import (SubscribeQtParent, SubscribeEv
 
 class QtObjStockCur(SubscribeQtParent):
 
-    evt_subscribe_data = pyqtSignal(ThreadData)
+    evt_subscribe_data = QSignal(ThreadData)
 
     def __init__(self):
         super().__init__()

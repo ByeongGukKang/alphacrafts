@@ -1,5 +1,5 @@
 
-from PyQt5.QtCore import pyqtSignal
+from Pyside2.QtCore import Signal as QSignal
 import win32com.client
 
 from alphacrafts.bkd.share.qt import ThreadData
@@ -124,7 +124,7 @@ class ObjCpTd0313:
 
 class QtObjCpConclusion(SubscribeQtParent):
 
-    evt_subscribe_data = pyqtSignal(ThreadData)
+    evt_subscribe_data = QSignal(ThreadData)
 
     def __init__(self):
         super().__init__()

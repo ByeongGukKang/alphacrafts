@@ -3,8 +3,10 @@ from collections import deque
 from datetime import datetime, timedelta
 
 import numpy as np
-from PyQt5.QtCore import (pyqtSignal, pyqtSlot, QObject, QThread)
-from PyQt5.QtTest import QTest
+from PySide2.QtCore import QObject, QThread
+from PySide2.QtCore import Signal as QSignal
+from PySide2.QtCore import Slot as QSlot
+from PySide2.QtTest import QTest
 
 from alphacrafts.bkd.share.qt import ThreadData
 from alphacrafts.bkd.creon.wrapper.account import ObjCpCybos
@@ -86,7 +88,7 @@ class QtBalanceManager(QObject):
 
         self._pf_value = self.cash + np.nansum(position_array*price_array)
 
-    @pyqtSlot(ThreadData)
+    @QSlot(ThreadData)
     def update_order_result(self, evt_order_result):
         pass
 
@@ -101,7 +103,7 @@ class QtBalanceManager(QObject):
 # Market Observation
 class QtObserverDiscrete(QObject):
     
-    evt_market_data = pyqtSignal(ThreadData)
+    evt_market_data = QSignal(ThreadData)
 
     def __init__(self, obj_observer_discrete):
         super().__init__()
@@ -140,7 +142,7 @@ class QtObserverDiscrete(QObject):
         self._creon_obj_data_output = kargs
 
     # Data request is triggered by Local Clock
-    @pyqtSlot(datetime)
+    @QSlot(datetime)
     def get_data(self, evt_local_time):
         if (evt_local_time - self._last_observation_time) >= self._freq:
             # Update Time
@@ -168,7 +170,7 @@ class QtObserverDiscrete(QObject):
 # Order Optimizer
 class QtOrderOptimizer(QThread):
 
-    evt_order_optimize_data = pyqtSignal(ThreadData)
+    evt_order_optimize_data = QSignal(ThreadData)
 
     def __init__(self, order_optimization_function):
         super().__init__()
@@ -228,12 +230,12 @@ class QtOrderOptimizer(QThread):
                 break
 
     # Market(OrderBook) Data
-    @pyqtSlot(ThreadData)
+    @QSlot(ThreadData)
     def update_orderbook(self, evt_orderbook_data):
         self._orderbook_data = evt_orderbook_data
 
     # Update Order Request
-    @pyqtSlot(ThreadData)
+    @QSlot(ThreadData)
     def optimize_order(self, evt_order_raw_data):
         # Split Array Order Info
         order_loc = np.where(evt_order_raw_data.data['order'] != 0)[0]
@@ -245,7 +247,7 @@ class QtOrderOptimizer(QThread):
             ))
         self.start()
 
-    @pyqtSlot(ThreadData)
+    @QSlot(ThreadData)
     def manage_order_result(self, evt_order_result):
         if evt_order_result.data['conclusion_type'] == '4':
             self._order_result_waitline[evt_order_result.data['order_number']] = (
@@ -275,7 +277,7 @@ class QtOrderOptimizer(QThread):
 
 class QtOrderExecutor(QThread):
 
-    evt_time_stop = pyqtSignal(bool)
+    evt_time_stop = QSlot(bool)
 
     def __init__(self, asset_list_fiter_num=1):
         super().__init__()
@@ -287,7 +289,7 @@ class QtOrderExecutor(QThread):
         self._order_queue = deque()
         self._freezer = False
 
-    @pyqtSlot(ThreadData)
+    @QSlot(ThreadData)
     def execute_order(self, evt_order_optimize_data):
         self.evt_time_stop.emit(True)
         for order in evt_order_optimize_data.data:
@@ -312,7 +314,7 @@ class QtOrderExecutor(QThread):
 
         self.evt_time_stop.emit(False)
 
-    # @pyqtSlot(ThreadData)
+    # @QSlot(ThreadData)
     # def execute_order(self, evt_order_optimize_data):
     #     if evt_order_optimize_data.header: # Send Realistic Order Only
     #         input_dict = evt_order_optimize_data.data

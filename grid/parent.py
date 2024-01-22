@@ -5,7 +5,7 @@ from threading import Thread
 import pickle
 import sys
 
-from PyQt5.QtWidgets import QMainWindow
+from PySide2.QtWidgets import QMainWindow
 
 import zmq
 import zmq.asyncio

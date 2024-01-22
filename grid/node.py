@@ -8,8 +8,9 @@ import pickle
 
 import numpy as np
 
-from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import pyqtSlot, QObject, QThread, pyqtSignal
+from PySide2.QtWidgets import QApplication
+from PySide2.QtCore import QObject, QThread
+from PySide2.QtCore import Slot as QSlot
 
 import zmq
 
@@ -120,7 +121,7 @@ class QtDataNode(GridQtNodeParent):
         if not (isinstance(worker, QThread) or isinstance(worker, QObject)):
             raise TypeError("worker must be an instance fro, 'QThread' or 'QObject'")
         self.workers[worker_name] = worker
-        self.workers_slot[worker_name] = pyqtSlot(ThreadData)(lambda data: self.update_meory(worker_name, data))
+        self.workers_slot[worker_name] = QSlot(ThreadData)(lambda data: self.update_meory(worker_name, data))
 
         self._setlist["set_worker"] = True
 
@@ -365,7 +366,7 @@ class AccountWorkerCreon(QObject):
             packed_orders.append(packed_order)
         return packed_orders
 
-    @pyqtSlot(ThreadData)
+    @QSlot(ThreadData)
     def unpack(self, order_result):
         # ordres = {9:"code",3:"ordqty",4:"exeprc",5:"ordnum",6:"origin_ordnum",12:"trdtype",14:"conclutype"}
         ordres = order_result.data

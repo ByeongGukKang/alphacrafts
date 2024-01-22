@@ -4,13 +4,13 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
-import alphacraft
+import alphacrafts
 
 def encrypt_file(salt: int, password: str, file):
     """
     salt: 0~9999
     """
-    with open(f"{alphacraft.location}\\data\\save\\salt_list.txt", 'r', encoding='utf-8') as f:
+    with open(f"{alphacrafts.location}\\data\\save\\salt_list.txt", 'r', encoding='utf-8') as f:
         salt_list = f.read().split("\n")    
 
     password = password.encode('utf-8')
@@ -33,7 +33,7 @@ def decrypt_file(salt: int, password: str, file):
     """
     salt: 0~9999
     """
-    with open(f"{alphacraft.location}\\data\\save\\salt_list.txt", 'r', encoding='utf-8') as f:
+    with open(f"{alphacrafts.location}\\data\\save\\salt_list.txt", 'r', encoding='utf-8') as f:
         salt_list = f.read().split("\n")
 
     password = password.encode('utf-8')

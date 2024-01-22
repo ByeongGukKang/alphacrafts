@@ -4,7 +4,7 @@ from datetime import datetime
 
 import numpy as np
 import pythoncom
-from PyQt5.QtCore import QObject
+from PySide2.QtCore import QObject
 import win32com.client
 import win32event
 
@@ -64,7 +64,7 @@ class SubscribeQtParent(QObject):
 
     """
     Define
-    evt_subscribe_data = pyqtSignal(ThreadData)
+    evt_subscribe_data = QSlot(ThreadData)
     """
     
     def __init__(self):

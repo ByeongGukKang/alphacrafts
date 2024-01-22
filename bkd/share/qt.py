@@ -4,8 +4,10 @@ from typing import Callable
 
 import numpy as np
 
-from PyQt5.QtCore import (pyqtSignal, pyqtSlot, QObject, QThread)
-from PyQt5.QtTest import QTest
+from PySide2.QtCore import QObject, QThread
+from PySide2.QtCore import Signal as QSignal
+from PySide2.QtCore import Slot as QSlot
+from PySide2.QtTest import QTest
 
 
 # ThreadData to communicate between QObjects
@@ -45,7 +47,7 @@ class ThreadData:
 # Local Clock
 class QtLocalClock(QThread):
 
-    evt_local_time = pyqtSignal(datetime)
+    evt_local_time = QSignal(datetime)
 
     def __init__(self):
         super().__init__()
@@ -61,7 +63,7 @@ class QtLocalClock(QThread):
             self.evt_local_time.emit(datetime.now())
             QTest.qWait(self.freq)
 
-    @pyqtSlot(bool)
+    @QSlot(bool)
     def manage_time_stop(self, evt_time_stop):
         self.time_stop = evt_time_stop
 
@@ -73,7 +75,7 @@ class QtStarter(QObject):
         self._start_time = start_time
         self._start_jobs = start_jobs
 
-    @pyqtSlot(datetime)
+    @QSlot(datetime)
     def check_time(self, evt_local_time):
         if evt_local_time > self._start_time:
             for job in self._start_jobs:
@@ -87,7 +89,7 @@ class QtEnder(QObject):
         self._end_time = end_time
         self._end_jobs = end_jobs
 
-    @pyqtSlot(datetime)
+    @QSlot(datetime)
     def check_time(self, evt_local_time):
         if evt_local_time > self._end_time:
             for job in self._end_jobs:
@@ -100,31 +102,31 @@ class QtMessanger(QObject):
         super().__init__()
         self.freq = 5000
 
-    @pyqtSlot(ThreadData)
+    @QSlot(ThreadData)
     def message_data(self, evt_market_data):
         pass
 
-    @pyqtSlot(ThreadData)
+    @QSlot(ThreadData)
     def message_preprocess(self, evt_preprocessed_data):
         pass
 
-    @pyqtSlot(ThreadData)
+    @QSlot(ThreadData)
     def message_signal(self, evt_signal_data):
         pass
 
-    @pyqtSlot(ThreadData)
+    @QSlot(ThreadData)
     def message_order_raw(self, evt_order_raw_data):
         pass
 
-    @pyqtSlot(ThreadData)
+    @QSlot(ThreadData)
     def message_order_optimize(self, evt_order_optimize_data):
         pass
 
-    @pyqtSlot(ThreadData)
+    @QSlot(ThreadData)
     def message_order_conclusion(self, evt_order_conclusion_data):
         pass
 
-    @pyqtSlot(ThreadData)
+    @QSlot(ThreadData)
     def message_userdef(self, evt_userdef_data):
         pass
 
@@ -156,31 +158,31 @@ class QtLogger(QObject):
     def __init__(self):
         super().__init__()
     
-    @pyqtSlot(ThreadData)
+    @QSlot(ThreadData)
     def log_data(self, evt_market_data):
         pass
 
-    @pyqtSlot(ThreadData)
+    @QSlot(ThreadData)
     def log_preprocess(self, evt_preprocessed_data):
         pass
 
-    @pyqtSlot(ThreadData)
+    @QSlot(ThreadData)
     def log_signal(self, evt_signal_data):
         pass
 
-    @pyqtSlot(ThreadData)
+    @QSlot(ThreadData)
     def log_order_raw(self, evt_order_raw_data):
         pass
 
-    @pyqtSlot(ThreadData)
+    @QSlot(ThreadData)
     def log_order_optimize(self, evt_order_optimize_data):
         pass
 
-    @pyqtSlot(ThreadData)
+    @QSlot(ThreadData)
     def log_order_conclusion(self, evt_order_conclusion_data):
         pass
 
-    @pyqtSlot(ThreadData)
+    @QSlot(ThreadData)
     def log_userdef(self, evt_userdef_data):
         pass
 
@@ -192,14 +194,14 @@ class QtDataConverter(QObject):
     Don't FORGET TO ALLOCATE self._memory & update_data Slot!!! \n 
 
     Define \n
-    @pyqtSlot(ThreadData) \n
+    @QSlot(ThreadData) \n
     def update_memory[CHANGE HERE MAKE (MAKE IT SAME AS MEMORY DICT KEY)](self, evt_market_data): \n
         self._memory[CHANGE HERE] = self._update_function(evt_market_data)
         self.check_memory()
     
     """
 
-    evt_preprocessed_data = pyqtSignal(ThreadData)
+    evt_preprocessed_data = QSignal(ThreadData)
 
     def __init__(self, number_of_memory_slot: int, preprocess_func: Callable, memory_condition_func: Callable, memory_update_func: Callable=lambda x:x):
         super().__init__()
@@ -265,7 +267,7 @@ class QtDataConverter(QObject):
             pass
 
     # Update Data
-    @pyqtSlot(ThreadData)
+    @QSlot(ThreadData)
     def update_memory(self, evt_market_data):
         self._memory = self._memory_update_function(evt_market_data)
         self.check_memory()
@@ -273,7 +275,7 @@ class QtDataConverter(QObject):
 # Signal Generator
 class QtSignalGenerator(QObject):
 
-    evt_signal_data = pyqtSignal(ThreadData)
+    evt_signal_data = QSignal(ThreadData)
 
     def __init__(self, signal_func: Callable):
         super().__init__()
@@ -291,7 +293,7 @@ class QtSignalGenerator(QObject):
             self._log_time = lambda: None
     
     # Generate Signal
-    @pyqtSlot(ThreadData)
+    @QSlot(ThreadData)
     def generate_signal(self, evt_preprocessed_data):
         # Start Time
         start_time = self._log_time()
@@ -310,7 +312,7 @@ class QtOrderGenerator(QObject):
         1d array of orders
     """
 
-    evt_order_raw_data = pyqtSignal(ThreadData)
+    evt_order_raw_data = QSignal(ThreadData)
 
     def __init__(self, qt_balance_manager_instance, signal_to_order_func: Callable):
         super().__init__()
@@ -337,7 +339,7 @@ class QtOrderGenerator(QObject):
 
     # Returns three array, one for stock_code, one for order, and one for target price.
     # res_order_raw = dict{'code':[], 'order':[], 'target_price':[]}
-    @pyqtSlot(ThreadData)
+    @QSlot(ThreadData)
     def generate_order(self, evt_signal_data):
         # Start Time
         start_time = self._log_time()
