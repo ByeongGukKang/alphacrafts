@@ -5,4 +5,5 @@ pywin32>=306
 pyzmq>=25.1.2
 PySide2>=5.15.2.1
 slack-sdk>=3.19.5
+tornado>=6.1
 tqdm>=4.66.1

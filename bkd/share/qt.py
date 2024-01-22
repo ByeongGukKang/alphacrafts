@@ -4,10 +4,9 @@ from typing import Callable
 
 import numpy as np
 
-from PySide2.QtCore import QObject, QThread
+from PySide2.QtCore import QObject, QThread, QEventLoop, QTimer
 from PySide2.QtCore import Signal as QSignal
 from PySide2.QtCore import Slot as QSlot
-from PySide2.QtTest import QTest
 
 
 # ThreadData to communicate between QObjects
@@ -50,18 +49,26 @@ class QtLocalClock(QThread):
     evt_local_time = QSignal(datetime)
 
     def __init__(self):
+        """
+        Default clock frequency is 500ms
+        """
         super().__init__()
         self.freq = 500
         self.go_flag = True
 
-    def set_freq(self, ms=500):
-        self.freq = ms
+    def set_freq(self, msec:int=500):
+        """
+        msec (int): clock frequency in millisecond
+        """
+        self.freq = msec
 
     def run(self):
         while self.go_flag:
-            # print(datetime.now())
             self.evt_local_time.emit(datetime.now())
-            QTest.qWait(self.freq)
+            # Replacement for PyQt5.QTest.qWait(self.freq)
+            loop = QEventLoop()
+            QTimer.singleShot(self.freq, loop.quit)
+            loop.exec_()
 
     @QSlot(bool)
     def manage_time_stop(self, evt_time_stop):

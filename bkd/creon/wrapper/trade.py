@@ -1,5 +1,5 @@
 
-from Pyside2.QtCore import Signal as QSignal
+from PySide2.QtCore import Signal as QSignal
 import win32com.client
 
 from alphacrafts.bkd.share.qt import ThreadData
