@@ -3,7 +3,7 @@ from collections import deque
 from datetime import datetime, timedelta
 
 import numpy as np
-from PySide2.QtCore import QObject, QThread
+from PySide2.QtCore import QObject, QThread, QEventLoop, QTimer
 from PySide2.QtCore import Signal as QSignal
 from PySide2.QtCore import Slot as QSlot
 from PySide2.QtTest import QTest
@@ -106,12 +106,15 @@ class QtObserverDiscrete(QObject):
     evt_market_data = QSignal(ThreadData)
 
     def __init__(self, obj_observer_discrete):
+        """
+        obj_observer_discrete (bkd.creon.wrapper.observer_discrete): Creon discrete observer object
+        """
         super().__init__()
         # Log Processing Time
-        self._log_time = lambda: None
+        self._log_func = lambda: None
 
-        # Data Request Frequency
-        self.set_freq()
+        # Default Data Request Frequency (2 seconds)
+        self.set_freq(2000)
         self._last_observation_time = datetime.now() - self._freq
         # Header Setting
         self._get_header = False
@@ -119,40 +122,60 @@ class QtObserverDiscrete(QObject):
         self.creon_obj = obj_observer_discrete
 
     # Log Processing Time
-    def set_log_time(self, log_time):
-        if log_time:
-            self._log_time = datetime.now
+    def set_log_time(self, doLog=True):
+        """
+        log_time (bool): if True, log processing time
+        """
+        if doLog:
+            self._log_func = datetime.now
         else:
-            self._log_time = lambda: None
+            self._log_func = lambda: None
 
     # Data Request Freqency
-    def set_freq(self, deltatime:timedelta=timedelta(seconds=1)):
-        self._freq = deltatime
-        self._timeout = deltatime.total_seconds() * 1000 # Convert second to millisecond
+    def set_freq(self, freq):
+        """
+        freq (int): frequency in millisecond
+        """
+        self._freq = timedelta(milliseconds=freq) # timedelta to generate request interval
+        self._timeout = freq # timeout while requesting data
 
     # Creon Object 
-    def set_input(self, **kargs):
-        self._creon_obj_input = kargs
+    def set_input(self, input_dict):
+        """
+        input_dict (dict): input_dict for Creon Object
+        """
+        self._creon_obj_input = input_dict
 
-    def set_header_output(self, get_header=True, **kargs):
+    def set_header_output(self, output_dict, get_header=True):
+        """
+        output_dict (dict): output_dict for Creon Object \n
+        get_header (bool): if True, get header
+        """
         self._get_header = get_header
-        self._creon_obj_header_output = kargs
+        self._creon_obj_header_output = output_dict
 
-    def set_data_output(self, **kargs):
-        self._creon_obj_data_output = kargs
+    def set_data_output(self, output_dict):
+        """
+        output_dict (dict): output_dict for Creon Object
+        """
+        self._creon_obj_data_output = output_dict
 
-    # Data request is triggered by Local Clock
+    # The QtLocalOsillator emits the current time (creates clocks)
+    # The QtObserverDiscrete receives the current time and request data from Creon
     @QSlot(datetime)
-    def get_data(self, evt_local_time):
-        if (evt_local_time - self._last_observation_time) >= self._freq:
+    def get_data(self, current_time):
+        if (current_time - self._last_observation_time) >= self._freq:
             # Update Time
-            self._last_observation_time = evt_local_time
+            self._last_observation_time = current_time
 
             # Send Request to Creon
             if ObjCpCybos.get_remain_count(1) != 0:
                 pass
             else:
-                QTest.qWait(ObjCpCybos.get_refresh_time(1))
+                # Waiting loop to replace PyQt5.QTest.qWait
+                loop = QEventLoop()
+                QTimer.singleShot(ObjCpCybos.get_refresh_time(1), loop.quit)
+                loop.exec_()
             
             self.creon_obj.set_input(**self._creon_obj_input)
             self.creon_obj.request(self._timeout) # Timeout as request frequency
@@ -164,7 +187,7 @@ class QtObserverDiscrete(QObject):
             res_data = self.creon_obj.get_data(**self._creon_obj_data_output)
 
             # Emit Data to Other Threads 
-            self.evt_market_data.emit(ThreadData(res_header, res_data, evt_local_time, self._log_time()))
+            self.evt_market_data.emit(ThreadData(res_header, res_data, current_time, self._log_func()))
 
 
 # Order Optimizer

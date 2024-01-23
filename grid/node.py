@@ -14,7 +14,7 @@ from PySide2.QtCore import Slot as QSlot
 
 import zmq
 
-from alphacrafts.bkd.share.qt import ThreadData, QtLocalClock
+from alphacrafts.bkd.share.qt import ThreadData, QtClock
 from alphacrafts.bkd.creon.wrapper.account import ObjCpCybos 
 from alphacrafts.bkd.creon.wrapper.trade import ObjCpTdUtil, ObjCpTd0311
 from alphacrafts.bkd.creon.wrapper.trade import ObjCpConclusion, _ObjCpConclusionEvent, QtObjCpConclusion
@@ -22,7 +22,7 @@ from alphacrafts.grid.parent import GridNodeParent, GridQtNodeParent
 from alphacrafts.grid.utils import Ledger
 
 
-# Qtworkers in DataQtNode are synchronized by its local clock
+# Qtworkers in DataQtNode are synchronized by its local qtclock
 # Clock generate tick --> tick emit signal --> signal trigger worker to request data
 # --> worker request data --> worker emit data --> data received by worker_slot (self.update_memory)
 # --> if the memory is full --> aggregate the memory --> publish the data
@@ -37,24 +37,28 @@ class QtDataNode(GridQtNodeParent):
 
     ### Commands ###
 
-    def _ncmd_clockoff(self, *args):
+    def _ncmd_clockbtn(self, *args):
         """
-        *args[0] (bool): clock off
+        *args[0] (bool): clock on/off
         """
-        self.qt_local_clock.time_stop = args[0]
-        self._call_lmsg(20, f"ncmd[MANAGER:clockoff] [success] {args[0]}")
+        if args[0]:
+            self.qtclock.timer_start()
+            self._call_lmsg(20, f"ncmd[MANAGER:clockoff] [success] {args[0]}")
+        elif not args[0]:
+            self.qtclock.timer_stop()
+            self._call_lmsg(20, f"ncmd[MANAGER:clockoff] [success] {args[0]}")
+        else:
+            self._call_lmsg(20, f"ncmd[MANAGER:clockoff] [fail] non-acceptable arg? {args[0]}")
 
     def _ncmd_shutdown(self):
         """
-        Shutdown node
+        Node shutdown
         """
         # Stop all threads
         self._threads["thd_master"][1] = False
-        self.qt_local_clock.go_flag = False
-        self.qt_local_clock.quit()
         # Disconnect all signals
         for worker_name, worker in self.workers.items():
-            self.qt_local_clock.evt_local_time.disconnect(worker.get_data)
+            self.qtclock.evt_time_tick.disconnect(worker.get_data)
             worker.evt_market_data.disconnect(self.workers_slot[worker_name])
         # Closing message
         self._call_lmsg(20, f"ncmd[MANAGER:shutdown] [success]")
@@ -72,16 +76,15 @@ class QtDataNode(GridQtNodeParent):
         super().start()
 
         # start threads
-        self.qt_local_clock.start()
+        self.qtclock.timer_start()
         # This is for not Qt workers
         for worker_name, worker in self.workers.items():
-            self.qt_local_clock.evt_local_time.connect(worker.get_data)
+            self.qtclock.evt_time_tick.connect(worker.get_data)
             worker.evt_market_data.connect(self.workers_slot[worker_name])
         self._call_lmsg(20, f"ncmd[MANAGER:start] [success]")
 
     def set_ready(self):
         self._setlist["set_worker"] = False
-        self._setlist["set_clock_frequency"] = False
         self._setlist["set_start"] = False
         self._setlist["set_ready"] = True
 
@@ -90,8 +93,8 @@ class QtDataNode(GridQtNodeParent):
         self._socket_data_pub.setsockopt(zmq.CONFLATE, True)
         self._socket_data_pub.bind(f"tcp://{ip}:{data_pub_port}")
 
-        # qt_local_clock - synchronize qt_workers
-        self.qt_local_clock = QtLocalClock()  
+        # qtclock - generate time tick
+        self.qtclock = QtClock()  
         # qt_workers - emit data
         self.workers = {}  
         # pystSlots - receive data from qt_workers
@@ -103,20 +106,21 @@ class QtDataNode(GridQtNodeParent):
 
         self._setlist["set_start"] = True
 
-    def set_clock_frequency(self, frequency):
+    def set_worker_frequency(self, worker_name, frequency=100):
         """
-        frequency (int): frequency of clock in ms
+        worker_name (str): name of worker \n
+        frequency (int): frequency of data request in msec
         """
         if not self._setlist["set_start"]:
             raise Exception("set_state must be called before set_clock_frequency")
-        self.qt_local_clock.set_freq(frequency)
+        self.workers[worker_name].set_freq(frequency)
 
-        self._setlist["set_clock_frequency"] = True
+        self._setlist[f"set_worker[{worker_name}]_frequency"] = True
 
     def set_worker(self, worker_name, worker):
         """
-        worker_name (str): name of worker
-        worker : an instance of QtObserver 
+        worker_name (str): name of worker \n
+        worker (bkd.creon.qt.QtObserver): an instance of QtObserver 
         """
         if not (isinstance(worker, QThread) or isinstance(worker, QObject)):
             raise TypeError("worker must be an instance fro, 'QThread' or 'QObject'")
@@ -124,6 +128,7 @@ class QtDataNode(GridQtNodeParent):
         self.workers_slot[worker_name] = QSlot(ThreadData)(lambda data: self.update_meory(worker_name, data))
 
         self._setlist["set_worker"] = True
+        self._setlist[f"set_worker[{worker_name}]_frequency"] = False
 
     def update_meory(self, worker_name, data):
         self.workers_memory[worker_name] = data

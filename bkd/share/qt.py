@@ -4,7 +4,7 @@ from typing import Callable
 
 import numpy as np
 
-from PySide2.QtCore import QObject, QThread, QEventLoop, QTimer
+from PySide2.QtCore import QObject, QThread, QEventLoop, QTime, QTimer
 from PySide2.QtCore import Signal as QSignal
 from PySide2.QtCore import Slot as QSlot
 
@@ -43,36 +43,41 @@ class ThreadData:
         return self._end_time
 
 
-# Local Clock
-class QtLocalClock(QThread):
+# QTimer Wrapper
+class QtClock(QObject):
 
-    evt_local_time = QSignal(datetime)
+    evt_time_tick = QSignal(datetime)
 
     def __init__(self):
         """
-        Default clock frequency is 500ms
+        Default clock frequency is 0 millisecond
         """
         super().__init__()
-        self.freq = 500
-        self.go_flag = True
 
-    def set_freq(self, msec:int=500):
+        self._freq = 0
+        self.qtimer = QTimer(self)
+        self.qtimer.timeout.connect(self.emit_time)
+
+    def emit_time(self):
+        self.evt_time_tick.emit(datetime.now())
+
+    def set_freq(self, msec:int=0):
         """
         msec (int): clock frequency in millisecond
         """
-        self.freq = msec
+        self._freq = msec
 
-    def run(self):
-        while self.go_flag:
-            self.evt_local_time.emit(datetime.now())
-            # Replacement for PyQt5.QTest.qWait(self.freq)
-            loop = QEventLoop()
-            QTimer.singleShot(self.freq, loop.quit)
-            loop.exec_()
+    def timer_start(self):
+        """
+        Start timer
+        """
+        self.qtimer.start(self._freq)
 
-    @QSlot(bool)
-    def manage_time_stop(self, evt_time_stop):
-        self.time_stop = evt_time_stop
+    def timer_stop(self):
+        """
+        Stop timer
+        """
+        self.qtimer.stop()
 
 # QtStarter
 class QtStarter(QObject):
