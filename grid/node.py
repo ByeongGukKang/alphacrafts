@@ -39,7 +39,7 @@ class QtDataNode(GridQtNodeParent):
 
     def _ncmd_clockbtn(self, *args):
         """
-        *args[0] (bool): clock on/off
+        *args[0] (bool): clock on/off \n
         """
         if args[0]:
             self.qtclock.timer_start()
@@ -52,7 +52,7 @@ class QtDataNode(GridQtNodeParent):
 
     def _ncmd_shutdown(self):
         """
-        Node shutdown
+        Shutdown the program \n
         """
         # Stop all threads
         self._threads["thd_master"][1] = False
@@ -68,10 +68,16 @@ class QtDataNode(GridQtNodeParent):
         sys.exit(0)
     
     def _ncmd_set_identity(self, *args):
+        """
+        args[0] (str): identity \n
+        """
         super()._ncmd_set_identity(*args)
         
     ### Main ###
     def start(self): # Must Defined
+        """
+        Start the node \n
+        """
         # check settings before start
         super().start()
 
@@ -84,11 +90,21 @@ class QtDataNode(GridQtNodeParent):
         self._call_lmsg(20, f"ncmd[MANAGER:start] [success]")
 
     def set_ready(self):
+        """
+        Set the node requirements to start \n
+        """
         self._setlist["set_worker"] = False
         self._setlist["set_start"] = False
         self._setlist["set_ready"] = True
 
     def set_start(self, ip, data_pub_port, func_agg_memory):
+        """
+        Set the node specific initial state \n
+        \n
+        ip (str): ip address \n
+        data_pub_port (int): port for publishing data \n
+        func_agg_memory (function): function to aggregate memory \n
+        """
         self._socket_data_pub = self._context.socket(zmq.PUB)
         self._socket_data_pub.setsockopt(zmq.CONFLATE, True)
         self._socket_data_pub.bind(f"tcp://{ip}:{data_pub_port}")
@@ -131,12 +147,17 @@ class QtDataNode(GridQtNodeParent):
         self._setlist[f"set_worker[{worker_name}]_frequency"] = False
 
     def update_meory(self, worker_name, data):
+        """
+        Automatically called when worker emit data \n
+        \n
+        worker_name (str): name of worker \n
+        data (dict): data from worker \n
+        """
         self.workers_memory[worker_name] = data
 
-        if len(self.workers_memory) == len(self.workers):
-            asyncio.run(self._net_pub_data(self._func_agg_memory(self.workers_memory)))
-            self.workers_memory = {}
-
+        if len(self.workers_memory) == len(self.workers): # Check if all workers have sent data
+            asyncio.run(self._net_pub_data(self._func_agg_memory(self.workers_memory))) # Publish aggregated data
+            self.workers_memory = {} # Clear memory
 
 
 class SignalNode(GridNodeParent):

@@ -177,14 +177,14 @@ class QtObserverDiscrete(QObject):
                 QTimer.singleShot(ObjCpCybos.get_refresh_time(1), loop.quit)
                 loop.exec_()
             
-            self.creon_obj.set_input(**self._creon_obj_input)
+            self.creon_obj.set_input(self._creon_obj_input)
             self.creon_obj.request(self._timeout) # Timeout as request frequency
 
             # Get Header & Data From Creon Object
             res_header = None
             if self._get_header:
-                res_header = self.creon_obj.get_header(**self._creon_obj_header_output)
-            res_data = self.creon_obj.get_data(**self._creon_obj_data_output)
+                res_header = self.creon_obj.get_header(self._creon_obj_header_output)
+            res_data = self.creon_obj.get_data(self._creon_obj_data_output)
 
             # Emit Data to Other Threads 
             self.evt_market_data.emit(ThreadData(res_header, res_data, current_time, self._log_func()))

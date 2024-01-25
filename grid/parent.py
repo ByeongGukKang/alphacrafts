@@ -75,12 +75,18 @@ class GridNodeParent:
 
     ## Main ###
     def start(self):
+        """
+        Check whether all settings are ready and start the node
+        """
         for key, value in self._setlist.items():
             if value == False:
                 raise Exception(f"Error: {key} is not set")
 
     ### Threads ###
     def _thd_master(self):
+        """
+        Thread for manager(master) node communication
+        """
         while True:
             if self._threads["thd_master"][1]:
                 res = asyncio.run(self._pub_recv())
@@ -96,13 +102,14 @@ class GridNodeParent:
     ### Network ###
     async def _pub_recv(self):
         """
+        Receive data from manager(master) PUB socket
         """
         [identity, data] = await self._sockets["manager_pub"].recv_multipart()
         return pickle.loads(data)
         
     async def _router_send(self, data):
         """
-        data (python object): data to send\n
+        data (python object): data to send
         """
         await self._sockets["manager_router"].send_pyobj(data)
         
@@ -118,6 +125,10 @@ class GridNodeParent:
     ## call commands 
         
     def _call_msg(self, level, message):
+        """
+        level (int): log level \n
+        message (str): message to send \n
+        """
         asyncio.run(self._router_send({"ncall":"msg", "args":(level, message)}))
         try:
             res = asyncio.wait_for(self._router_recv(), timeout=2)
@@ -125,6 +136,10 @@ class GridNodeParent:
             self._call_log(40, f"ncall[msg] [fail] {e}")
 
     def _call_log(self, level, message):
+        """
+        level (int): log level \n
+        message (str): message to send \n
+        """
         self._logger.log(level, message)
 
     def _call_lmsg(self, level, message):
@@ -132,7 +147,7 @@ class GridNodeParent:
         log format: \n
             cmd[USER:START] [success] \n
             ncall[{identity}:{command_and_args['cmd']}] [success] \n
-            ncall[USER:{command_and_args['cmd']}] [fail] {e}
+            ncall[USER:{command_and_args['cmd']}] [fail] {e} \n
         """
         self._call_log(level, message)
         self._call_msg(level, message)
@@ -147,7 +162,7 @@ class GridNodeParent:
 
     def _ncmd_shutdown(self):
         """
-        Stop node
+        Shutdown node
         """
         self._threads["thd_master"][1] = False
         self._call_lmsg(20, f"ncmd[MANAGER:shutdown] [success]")
@@ -285,12 +300,18 @@ class GridQtNodeParent(QMainWindow):
 
     ## Main ###
     def start(self):
+        """
+        Check whether all settings are ready and start the node
+        """
         for key, value in self._setlist.items():
             if value == False:
                 raise Exception(f"Error: {key} is not set")
 
     ### Threads ###
     def _thd_master(self):
+        """
+        Thread for manager(master) node communication
+        """
         while True:
             if self._threads["thd_master"][1]:
                 res = asyncio.run(self._pub_recv())
@@ -306,13 +327,14 @@ class GridQtNodeParent(QMainWindow):
     ### Network ###
     async def _pub_recv(self):
         """
+        Receive data from manager(master) PUB socket
         """
         [identity, data] = await self._sockets["manager_pub"].recv_multipart()
         return pickle.loads(data)
         
     async def _router_send(self, data):
         """
-        data (python object): data to send\n
+        data (python object): data to send
         """
         await self._sockets["manager_router"].send_pyobj(data)
         
@@ -320,16 +342,18 @@ class GridQtNodeParent(QMainWindow):
         """
         timeout (float): timeout in seconds
         """
-        # [identity, data] = await self._sockets["manager_router"].recv_multipart()
-        # return pickle.loads(data)
-        data = await self._sockets["manager_router"].recv_pyobj()
-        return data
+        [identity, data] = await self._sockets["manager_router"].recv_multipart()
+        return pickle.loads(data)
     
 
     ### Commands ###
     ## call commands 
         
     def _call_msg(self, level, message):
+        """
+        level (int): log level \n
+        message (str): message to send \n
+        """
         asyncio.run(self._router_send({"ncall":"msg", "args":(level, message)}))
         try:
             res = asyncio.wait_for(self._router_recv(), timeout=2)
@@ -337,6 +361,10 @@ class GridQtNodeParent(QMainWindow):
             self._call_log(40, f"ncall[msg] [fail] {e}")
 
     def _call_log(self, level, message):
+        """
+        level (int): log level \n
+        message (str): message to send \n
+        """
         self._logger.log(level, message)
 
     def _call_lmsg(self, level, message):
@@ -344,7 +372,7 @@ class GridQtNodeParent(QMainWindow):
         log format: \n
             cmd[USER:START] [success] \n
             ncall[{identity}:{command_and_args['cmd']}] [success] \n
-            ncall[USER:{command_and_args['cmd']}] [fail] {e}
+            ncall[USER:{command_and_args['cmd']}] [fail] {e} \n
         """
         self._call_log(level, message)
         self._call_msg(level, message)
@@ -359,7 +387,7 @@ class GridQtNodeParent(QMainWindow):
 
     def _ncmd_shutdown(self):
         """
-        Stop node
+        Shutdown node
         """
         self._threads["thd_master"][1] = False
         self._call_lmsg(20, f"ncmd[MANAGER:shutdown] [success]")
@@ -380,5 +408,5 @@ class GridQtNodeParent(QMainWindow):
         self._sockets["manager_router"] = self._context.socket(zmq.DEALER) # connect to master router socket as dealer
         self._sockets["manager_router"].setsockopt(zmq.IDENTITY, self._identity.encode("utf-8")) # Change identity
         self._sockets["manager_router"].connect(f"tcp://{self._master_ip}:{self._master_router_port}")
-        self._sockets["manager_pub"].setsockopt_unicode(zmq.SUBSCRIBE, self._identity)
+        self._sockets["manager_pub"].setsockopt_string(zmq.SUBSCRIBE, self._identity)
         self._call_lmsg(20, f"ncmd[MANAGER:setid] [success]")

@@ -13,6 +13,12 @@ from PySide2.QtCore import Slot as QSlot
 class ThreadData:
 
     def __init__(self, header, data, start_time=None, end_time=None):
+        """
+        header: data header \n
+        data: data (contents) \n
+        start_time (datetime): start time of data processing \n
+        end_time (datetime): end time of data processing \n
+        """
         self._header = header
         self._data = data
         self._start_time = start_time
@@ -56,9 +62,13 @@ class QtClock(QObject):
 
         self._freq = 0
         self.qtimer = QTimer(self)
-        self.qtimer.timeout.connect(self.emit_time)
+        self.qtimer.timeout.connect(self._emit_time)
 
-    def emit_time(self):
+    def _emit_time(self):
+        """
+        Emit current time tick \n
+        Automatically called by QTimer
+        """
         self.evt_time_tick.emit(datetime.now())
 
     def set_freq(self, msec:int=0):
