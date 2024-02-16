@@ -3,7 +3,7 @@ import datetime as dt
 
 import numpy as np
 
-from alphacraft.frt.types import NbDate
+from alphacrafts.frt.types import NbDate
 
 def to_nb_datetime(str_datetime):
     np_datetime = np.datetime64(str_datetime, 's')

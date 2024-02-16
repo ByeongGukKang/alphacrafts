@@ -8,6 +8,10 @@ from PySide2.QtCore import QObject, QThread, QEventLoop, QTime, QTimer
 from PySide2.QtCore import Signal as QSignal
 from PySide2.QtCore import Slot as QSlot
 
+# def qsleep(self):
+#     loop = QEventLoop()
+#     QTimer.singleShot(10000, loop.quit) # msec
+#     loop.exec_()
 
 # ThreadData to communicate between QObjects
 class ThreadData:

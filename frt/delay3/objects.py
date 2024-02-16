@@ -6,9 +6,9 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 
-from alphacraft.frt.tools import to_nb_datetime
-from alphacraft.frt.types import OrderResult, Performance
-from alphacraft.frt.delay.execution import basic_buy_execution, basic_sell_execution
+from alphacrafts.frt.tools import to_nb_datetime
+from alphacrafts.frt.types import OrderResult, Performance
+from alphacrafts.frt.delay3.execution import basic_buy_execution, basic_sell_execution
 
 
 class ExchangeSender: 
