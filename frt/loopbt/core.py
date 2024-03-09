@@ -17,6 +17,7 @@ class PacketPacker:
         """
         self._frame_data = {}
         self._frame_data_index = {}
+        self._frame_data_dtype = {}
         self._iscompiled = False
 
         # TODO price_df의 index 및 column의 dtype 확인
@@ -26,9 +27,9 @@ class PacketPacker:
         # Index data type check
         if not isinstance(price_df.index, pd.DatetimeIndex):
             raise TypeError("Data index must be DatetimeIndex!")
-        self._frame_data["price"] = price_df.values
-        self._frame_data_index["price"] = price_df.index
-        self._sender_column = price_df.columns
+        self._frame_prc = price_df.values
+        self._frame_prc_index = price_df.index
+        self._frame_prc_column = price_df.columns
         
     def add_data(self, key, data):
         """
@@ -53,6 +54,15 @@ class PacketPacker:
         
         self._frame_data[key] = data.values
         self._frame_data_index[key] = data.index
+        self._frame_data_dtype[key] = data.dtypes.values[0]
+
+    def get_data(self, key):
+        """
+        key : key of data to be retrieved
+        """
+        if key not in self._frame_data.keys():
+            raise KeyError(f"Key {key} does not exist!")
+        return pd.DataFrame(self._frame_data[key], index=self._frame_data_index[key], columns=self._frame_prc_column)
 
     def del_data(self, key):
         """
@@ -63,55 +73,68 @@ class PacketPacker:
         del self._frame_data[key]
         del self._frame_data_index[key]
 
-    # TODO window_size for each frame_data
     def compile(
             self,
-            window_size: int,
+            window_size: int|dict,
             drop_initials: bool = True
         ):
         """Compile data into packets
 
         Args:
-            window_size (int): number of price obersevations to be included in each packet
-            drop_initials (bool): drop initial packets that does not have enough data 
+            window_size (int, dict, np.inf): number of obersevations of data for each frame_data to be included in each packet
+            - dictionary argument should be with key: frame_data key, value: window_size (int)
+            - np.inf will work as an expanding window, it ignores drop_initials
+            drop_initials (bool): drop initial packets that does not have enough data. Defaults to True
+
         """
+        if isinstance(window_size, int):
+            window_size = {key: window_size for key in self._frame_data.keys()}
+        elif isinstance(window_size, dict):
+            for key, value in window_size.items():
+                if key not in self._frame_data.keys():
+                    raise Exception(f"Key {key} does not exist in frame_data!")
+                if not isinstance(value, int):
+                    raise Exception(f"window_size must be integer!")
+        elif window_size == np.inf:
+            window_size = {key: np.inf for key in self._frame_data.keys()}
+            drop_initials = False
+        else:
+            raise Exception("window_size must be integer or dict!")
+
         # Sender index
         self._sender_index = []
-
-        # Match with Python index starts from 0
-        window_size = window_size - 1 
-
         # Memory to save complied data
         self._complied_data = {}
 
-        # Date index for loop
-        date_index = self._frame_data_index["price"]
-
         # Loop for each date
-        for cnt, end_date in enumerate(tqdm(date_index, desc="Compiling data packets...")):
+        # cnt (int), end_date (datetime)
+        for cnt, prc_end_date in enumerate(tqdm(self._frame_prc_index, desc="Compiling data packets...")):
 
-            # drop initials
-            if (cnt < window_size) & (drop_initials):
-                continue
-
-            # set start date
-            start_date = date_index[max(cnt - window_size, 0)]
-
-            # generate packet
-            packet_idx = {} # packet that contains index of each frame_data, key:tuple 로 이루어짐 tuple(start_index,end_index)
-            for key in self._frame_data.keys():
-                idx_list = np.where((self._frame_data_index[key] >= start_date) & (self._frame_data_index[key] <= end_date))[0]
-                if len(idx_list) == 0:
-                    packet_idx[key] = None
+            isInitial = False
+            packet_idx = {} # packet that contains index of each frame_data, key:tuple 로 이루어짐 tuple(start_index, end_index)
+            for key, data_index in self._frame_data_index.items():
+                avail_data_idx = np.where(data_index < prc_end_date)[0] # array of available data index, before prc_end_date(CURRENT TIME)
+                if drop_initials:
+                    if len(avail_data_idx) < window_size[key]:
+                        isInitial = True
+                        break
+                    str_idx = avail_data_idx[-1] - window_size[key] + 1
                 else:
-                    str_idx = np.where((self._frame_data_index[key] >= start_date) & (self._frame_data_index[key] <= end_date))[0][0] 
-                    end_idx = np.where((self._frame_data_index[key] >= start_date) & (self._frame_data_index[key] <= end_date))[0][-1] # TODO avoid using -1 index
-                    packet_idx[key] = [str_idx, end_idx]
+                    if len(avail_data_idx) == 0:
+                        isInitial = True
+                        break
+                    str_idx = max(avail_data_idx[-1] - window_size[key] + 1, 0)
 
-            # save packet, end_date equals to current time
-            self._complied_data[end_date] = packet_idx
-            # append index
-            self._sender_index.append(end_date)
+                end_idx = avail_data_idx[-1]
+                packet_idx[key] = [str_idx, end_idx]
+
+            if isInitial:
+                continue
+            else:
+                # save packet, end_date equals to current time
+                self._complied_data[prc_end_date] = (cnt, packet_idx) 
+                # append index
+                self._sender_index.append(prc_end_date)
         
         # iscomplied flag
         self._iscompiled = True
@@ -129,7 +152,7 @@ class PacketPacker:
         # check if data is complied
         if not self._iscompiled:
             raise Exception("Data is not complied yet!")
-        return self._sender_column
+        return self._frame_prc_column
 
     # TODO ?
     # Maybe we can move to normal function that does not use yield
@@ -145,16 +168,22 @@ class PacketPacker:
         # generator
         def packet_generator():
             # packing data
-            for time, packet_idx in self._complied_data.items(): # key:packet_idx
+            for time, packet_tuple in self._complied_data.items(): # key:packet_idx
                 packet_val = {} # real packet with data value
 
-                for key, tuple_idx in packet_idx.items():
-                    if tuple_idx == None:
-                        packet_val[key] = np.nan
-                    else:
-                        packet_val[key] = self._frame_data[key][tuple_idx[0]:tuple_idx[1]+1,:]
+                current_price = self._frame_prc[packet_tuple[0],:].ravel('C') # current price array
+                # TODO Is it really helpful to give current price to a researcher?
+                packet_val['prc'] = current_price 
 
-                yield time, packet_val 
+                packet_idx = packet_tuple[1]
+                for key, tuple_idx in packet_idx.items():
+                    tmp_data = self._frame_data[key][tuple_idx[0]:tuple_idx[1]+1,:]
+                    if isinstance(tmp_data, np.ndarray):
+                        packet_val[key] = self._frame_data[key][tuple_idx[0]:tuple_idx[1]+1,:]
+                    else:
+                        packet_val[key] = np.array(tmp_data, dtype=self._frame_data_dtype[key])
+
+                yield time, packet_val, current_price
         
         return packet_generator()
     
@@ -175,11 +204,12 @@ class LedgerBackTest:
         
         self._book = np.zeros(
             shape = (len(sender_index), len(sender_column)),
-            dtype = [("order", "f8"), ("order_price", "f8"), ("position", "f8"), ("position_price", "f8")],
+            # dtype = [("order", "f8"), ("order_price", "f8"), ("position", "f8"), ("position_price", "f8")],
+            dtype = [("posit", "f8"), ("posit_prc", "f8")],
             order = 'C' # C: row-major, F: column-major
         )
 
-        # row index (acts like pointer)
+        # row index (acts like a pointer)
         self._curr_loc = -1 
 
     ### Backtest ###
@@ -190,7 +220,7 @@ class LedgerBackTest:
         self._cash[self._curr_loc + 1] = self._cash[self._curr_loc]
         self._book[self._curr_loc + 1] = self._book[self._curr_loc]
         # update portfolio value
-        self._pf_value[self._curr_loc + 1] = self._cash[self._curr_loc] + np.nansum(self._book["position"][self._curr_loc] * current_price)
+        self._pf_value[self._curr_loc + 1] = self._cash[self._curr_loc] + np.nansum(self._book["posit"][self._curr_loc] * current_price)
         # increase location pointer
         self._curr_loc += 1
 
@@ -225,9 +255,9 @@ class LedgerBackTest:
         delta_position (1d array[float]): change in position
         new_price (1d array)[float]: new position price
         """
-        current_size = self._book["position"][self._curr_loc]
-        self._book["position"][self._curr_loc] += delta_position
-        self._book["position_price"][self._curr_loc] = ((current_size * self._book["position_price"][self._curr_loc]) + (delta_position * new_price)) / self._book["position"][self._curr_loc]
+        current_size = self._book["posit"][self._curr_loc]
+        self._book["posit"][self._curr_loc] += delta_position
+        self._book["posit_prc"][self._curr_loc] = ((current_size * self._book["posit_prc"][self._curr_loc]) + (delta_position * new_price)) / self._book["posit"][self._curr_loc]
 
 
     # TODO Remove and create performance
@@ -251,11 +281,11 @@ class LedgerBackTest:
     
     @property
     def position(self):
-        return pd.DataFrame(self._book["position"], index=self._base_index, columns=self._base_columns)
+        return pd.DataFrame(self._book["posit"], index=self._base_index, columns=self._base_columns)
     
     @property
     def position_price(self):
-        return pd.DataFrame(self._book["position_price"], index=self._base_index, columns=self._base_columns)
+        return pd.DataFrame(self._book["posit_prc"], index=self._base_index, columns=self._base_columns)
     
 
 # Historical 용도 FINAL
@@ -277,7 +307,7 @@ class Trader:
             init_cash (float): initial cash
             signal_func (types.FunctionType): signal function, user defined
             order_func (types.FunctionType): order function, take one from alphacrafts.frt.loopbt.func_order
-            transaction_cost (tuple, optional): transaction cost. Defaults to (0,0).
+            transaction_cost (tuple, optional): transaction cost. (buy_fee, sell_fee). Defaults to (0,0).
             leverage_factor (float, optional): leverage factor. Defaults to 1.0.
 
         """
@@ -292,8 +322,8 @@ class Trader:
         self.signal_func = signal_func
         self.order_func = order_func
 
-        self.buy_fee = 1 + transaction_cost[0]
-        self.sell_fee = 1 - transaction_cost[1]
+        self.buy_fee = np.float64(1 + transaction_cost[0])
+        self.sell_fee = np.float64(1 - transaction_cost[1])
 
         self.leverage_factor = leverage_factor
 
@@ -323,38 +353,86 @@ class Trader:
         if self._performance is None:
             raise Exception("Backtest not done yet!")
         return self._performance
-
-    def _initiate(self, sender_index, sender_column):
-        return LedgerBackTest(self.init_cash, sender_index, sender_column)
     
     def run(self, packet_packer: PacketPacker):
+        data_index = packet_packer.data_index
+        data_column = packet_packer.data_column
+        packet_generator = packet_packer.datafeed()
+
+        self.ledger = LedgerBackTest(self.init_cash, data_index, data_column)
+        larger_fee = min(self.buy_fee, self.sell_fee)
+        var_signal = self.var_signal.copy()
+
+        for _ in tqdm(range(len(data_index)-1), desc=f'Backtesting [{self.name}]...'):
+
+            ### Get data packet
+            time, trader_data, current_price = next(packet_generator)
+
+            ### Move to next time
+            self.ledger._bt_next(current_price)
+
+            ### Generate Signals & Orders
+
+            # TODO 분할매수/매도 가능하도록 수정
+            weight_signal, var_signal = self.signal_func(
+                time,                                
+                trader_data,
+                self.ledger._bt_cash,
+                self.ledger._bt_pf_value,
+                self.ledger._bt_book,
+                var_signal
+            )
+            
+            if weight_signal is not None:
+                orders = self.order_func(
+                    current_price,  
+                    larger_fee,
+                    self.ledger._bt_book['posit'].ravel('C'),
+                    self.ledger._bt_pf_value,
+                    weight_signal.astype(np.float64),
+                    self.leverage_factor,
+                )
+
+                ### Execute Orders
+                delta_position_cash, delta_cash_sum, delta_position = execF_basic(current_price, orders, self.buy_fee, self.sell_fee)
+
+                # Update Ledger
+                self.ledger._bt_add_cash(delta_cash_sum)
+                self.ledger._bt_add_position(delta_position, current_price)
+        
+        # Backtest Done
+        time, trader_data, current_price = next(packet_generator)
+        self.ledger._bt_next(current_price)
+
+    def run_speedcheck(self, packet_packer: PacketPacker):
         from datetime import datetime 
         data_index = packet_packer.data_index
         data_column = packet_packer.data_column
         packet_generator = packet_packer.datafeed()
 
-        self.ledger = self._initiate(data_index, data_column)
-        large_fee = min(self.buy_fee, self.sell_fee)
+        self.ledger = LedgerBackTest(self.init_cash, data_index, data_column)
+        larger_fee = min(self.buy_fee, self.sell_fee)
         var_signal = self.var_signal.copy()
 
-        self.start_time = datetime.now()
-        self.generator_time = self.start_time
-        self.signal_time = self.start_time
-        self.order_time = self.start_time
-        self.execution_time = self.start_time
+        start_time = datetime.now()
+        self.generator_time = start_time
+        self.signal_time = start_time
+        self.order_time = start_time
+        self.execution_time = start_time
 
         for _ in tqdm(range(len(data_index)-1), desc=f'Backtesting [{self.name}]...'):
 
             ### Get data packet
             tmp_start_time = datetime.now()
-            time, trader_data = next(packet_generator)
-            current_price = trader_data["price"][-1] # TODO curr_idx
+            time, trader_data, current_price = next(packet_generator)
             self.generator_time += datetime.now() - tmp_start_time
 
             ### Move to next time
             self.ledger._bt_next(current_price)
 
             ### Generate Signals & Orders
+
+            # TODO 분할매수/매도 가능하도록 수정
             tmp_start_time = datetime.now()
             weight_signal, var_signal = self.signal_func(
                 time,                                
@@ -370,10 +448,10 @@ class Trader:
                 tmp_start_time = datetime.now()
                 orders = self.order_func(
                     current_price,  
-                    large_fee,
-                    self.ledger._bt_book['position'],
+                    larger_fee,
+                    self.ledger._bt_book['posit'].ravel('C'),
                     self.ledger._bt_pf_value,
-                    weight_signal,
+                    weight_signal.astype(np.float64),
                     self.leverage_factor,
                 )
                 self.order_time += datetime.now() - tmp_start_time
@@ -388,5 +466,6 @@ class Trader:
                 self.ledger._bt_add_position(delta_position, current_price)
         
         # Backtest Done
+        time, trader_data, current_price = next(packet_generator)
         self.ledger._bt_next(current_price)
         

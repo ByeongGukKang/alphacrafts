@@ -147,10 +147,26 @@ def opr1d_winsor_by_zscore(arr, hurdle=2.58):
     else:
         ValueError(f'Only float64 and float32 are supported, but got {arr.dtype}')
 
+def oprts_winsor_by_zscore(arr, hurdle=2.58):
+    if arr.dtype == np.float64:
+         return _ts_flt64.winsor_by_zscore(arr, hurdle)
+    elif arr.dtype == np.float32:
+        raise NotImplementedError(f'Not implemented for {arr.dtype}')
+    else:
+        ValueError(f'Only float64 and float32 are supported, but got {arr.dtype}')
+
 # Winsorization by Percentile
-def opr1d_winsor_by_percentile(arr, hurdle=0.01):
+def opr1d_winsor_by_percentile(arr, hurdle=1.0):
     if arr.dtype == np.float64:
          return _1d_flt64.winsor_by_percentile(arr, hurdle)
+    elif arr.dtype == np.float32:
+        raise NotImplementedError(f'Not implemented for {arr.dtype}')
+    else:
+        ValueError(f'Only float64 and float32 are supported, but got {arr.dtype}')
+
+def oprts_winsor_by_percentile(arr, hurdle=1.0):
+    if arr.dtype == np.float64:
+         return _ts_flt64.winsor_by_percentile(arr, hurdle)
     elif arr.dtype == np.float32:
         raise NotImplementedError(f'Not implemented for {arr.dtype}')
     else:
@@ -160,6 +176,14 @@ def opr1d_winsor_by_percentile(arr, hurdle=0.01):
 def opr1d_softmax(arr):
     if arr.dtype == np.float64:
          return _1d_flt64.softmax(arr)
+    elif arr.dtype == np.float32:
+        raise NotImplementedError(f'Not implemented for {arr.dtype}')
+    else:
+        ValueError(f'Only float64 and float32 are supported, but got {arr.dtype}')
+
+def oprts_softmax(arr):
+    if arr.dtype == np.float64:
+         return _ts_flt64.softmax(arr)
     elif arr.dtype == np.float32:
         raise NotImplementedError(f'Not implemented for {arr.dtype}')
     else:

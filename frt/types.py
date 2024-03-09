@@ -5,19 +5,31 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 
+class Singleton:
+    __instance = None
+
+    def __new__(cls):
+        if cls.__instance is None:
+            cls.__instance = super().__new__(cls)
+        return cls.__instance
+
 @nb.experimental.jitclass([
-    ('date', nb.types.NPDatetime('s')),
-    ('year', nb.types.int16),
-    ('month', nb.types.int8),
-    ('day', nb.types.int8),
-    ('weekday', nb.types.int8),
-    ('hour', nb.types.int8),
-    ('minute', nb.types.int8),
-    ('second', nb.types.int8),
+    ('datetime', nb.types.NPDatetime('ms')),
+    ('__str', nb.types.unicode_type),
+    ('year', nb.uint16),
+    ('month', nb.uint8),
+    ('day', nb.uint8),
+    ('weekday', nb.uint8),
+    ('hour', nb.uint8),
+    ('minute', nb.uint8),
+    ('second', nb.uint8),
+    ('millisecond', nb.uint16)
 ])
-class NbDate:
-    def __init__(self, np_datetime, year, month, day, weekday, hour, minute, second):
-        self.date = np_datetime
+class nbDatetime:
+
+    def __init__(self, np_datetime, str_datetime, year, month, day, weekday, hour, minute, second, millisecond):
+        self.datetime = np_datetime
+        self.__str = str_datetime
         self.year = year
         self.month = month
         self.day = day
@@ -25,40 +37,160 @@ class NbDate:
         self.hour = hour
         self.minute = minute
         self.second = second
+        self.millisecond = millisecond
 
-@nb.experimental.jitclass([
-    ('symbol', nb.types.unicode_type),
-    ('price', nb.types.float64),
-    ('volume', nb.types.float64),
-    ('order_type', nb.types.int8),
-])
-class Order:
+    def __str__(self):
+        return self.__str
 
-    def __init__(
-        self,
-        symbol:nb.types.unicode_type,
-        price:nb.types.float64,
-        volume:nb.types.int64,
-        order_type:nb.types.int8 = 0
-    ):
-        self.symbol = symbol # 종목 코드
-        self.price = price # 가격
-        self.volume = volume # 수량
-        self.order_type = order_type # 시장가, FOK 등등
+    def __eq__(self, other):
+        if isinstance(other, nbDatetime):
+            return self.datetime == other.datetime
+        elif "datetime64" in str(type(other)):
+            return self.datetime == other
+        else:
+            raise ValueError("other must be a nbDatetime or a np.datetime64 object")
 
-@nb.experimental.jitclass([
-    ('symbol', nb.types.unicode_type),
-    ('price', nb.types.float64),
-    ('volume', nb.types.float64),
-    ('result_type', nb.types.int8),
-])
-class OrderResult:
+    def __ne__(self, other):
+        if isinstance(other, nbDatetime):
+            return self.datetime != other.datetime
+        elif "datetime64" in str(type(other)):
+            return self.datetime != other
+        else:
+            raise ValueError("other must be a nbDatetime or a np.datetime64 object")
+    
+    def __lt__(self, other):
+        if isinstance(other, nbDatetime):
+            return self.datetime < other.datetime
+        elif isinstance(other, np.datetime64):
+            return self.datetime < other
+        else:
+            raise ValueError("other must be a nbDatetime or a np.datetime64 object")
+    
+    def __le__(self, other):
+        if isinstance(other, nbDatetime):
+            return self.datetime <= other.datetime
+        elif isinstance(other, np.datetime64):
+            return self.datetime <= other
+        else:
+            raise ValueError("other must be a nbDatetime or a np.datetime64 object")
+    
+    def __gt__(self, other):
+        if isinstance(other, nbDatetime):
+            return self.datetime > other.datetime
+        elif isinstance(other, np.datetime64):
+            return self.datetime > other
+        else:
+            raise ValueError("other must be a nbDatetime or a np.datetime64 object")
+    
+    def __ge__(self, other):
+        if isinstance(other, nbDatetime):
+            return self.datetime >= other.datetime
+        elif isinstance(other, np.datetime64):
+            return self.datetime >= other
+        else:
+            raise ValueError("other must be a nbDatetime or a np.datetime64 object")
+    
+    def __add__(self, other):
+        if isinstance(other, nbTimeDelta):
+            return self.datetime + other
+        else:
+            raise ValueError("other must be a np.timedelta64 object")
+    
+    def __sub__(self, other):
+        if isinstance(other, nbDatetime):
+            return self.datetime - other.datetime
+        elif "timedelta64" in str(type(other)):
+            return self.datetime - other
+        else:
+            raise ValueError("other must be a nbDatetime or a np.timedelta64 object")
+    
+    def __radd__(self, other):
+        if "timedelta64" in str(type(other)):
+            return other + self.datetime
+        else:
+            raise ValueError("other must be a np.timedelta64 object")
+    
+    def __rsub__(self, other):
+        if isinstance(other, nbDatetime):
+            return  other.datetime - self.datetime
+        elif "timedelta64" in str(type(other)):
+            return other - self.datetime
+        else:
+            raise ValueError("other must be a nbDatetime or a np.datetime64 object")
+    
+# @nb.experimental.jitclass([
+#     ('M', nb.types.NPTimedelta('M')),
+#     ('W', nb.types.NPTimedelta('W')),
+#     ('D', nb.types.NPTimedelta('D')),
+#     ('h', nb.types.NPTimedelta('h')),
+#     ('m', nb.types.NPTimedelta('m')),
+#     ('s', nb.types.NPTimedelta('s')),
+#     ('ms', nb.types.NPTimedelta('ms')),
+#     ('unit', nb.types.unicode_type)
+# ])
+# class nbTimeDelta:
 
-    def __init__(self, symbol, price, volume, result_type):
-        self.symbol = symbol
-        self.price = price
-        self.volume = volume
-        self.result_type = result_type
+#     def __init__(self, unit):
+#         self.M = np.timedelta64(0, 'M')
+#         self.W = np.timedelta64(0, 'W')
+#         self.D = np.timedelta64(0, 'D')
+#         self.h = np.timedelta64(0, 'h')
+#         self.m = np.timedelta64(0, 'm')
+#         self.s = np.timedelta64(0, 's')
+#         self.ms = np.timedelta64(0, 'ms')
+#         self.unit = unit
+    
+#     def set(self, value):
+#         getattr(self, self.unit) = value
+
+# @nb.experimental.jitclass([
+#     ('timedelta', nb.types.NPTimedelta('W')),
+# ])
+# class nbTimedeltaWeek:
+
+#     def __init__(self, np_timedelta):
+#         self.timedelta = np_timedelta
+
+# @nb.experimental.jitclass([
+#     ('timedelta', nb.types.NPTimedelta('D')),
+# ])
+# class nbTimedeltaDay:
+
+#     def __init__(self, np_timedelta):
+#         self.timedelta = np_timedelta
+
+# @nb.experimental.jitclass([
+#     ('timedelta', nb.types.NPTimedelta('h')),
+# ])
+# class nbTimedeltaHour:
+
+#     def __init__(self, np_timedelta):
+#         self.timedelta = np_timedelta
+
+# @nb.experimental.jitclass([
+#     ('timedelta', nb.types.NPTimedelta('m')),
+# ])
+# class nbTimedeltaMinute:
+
+#     def __init__(self, np_timedelta):
+#         self.timedelta = np_timedelta
+
+# @nb.experimental.jitclass([
+#     ('timedelta', nb.types.NPTimedelta('s')),
+# ])
+# class nbTimedeltaSecond:
+
+#     def __init__(self, np_timedelta):
+#         self.timedelta = np_timedelta
+
+# @nb.experimental.jitclass([
+#     ('timedelta', nb.types.NPTimedelta('ms')),
+# ])
+# class nbTimedeltaMillisecond:
+
+#     def __init__(self, np_timedelta):
+#         self.timedelta = np_timedelta
+
 
 
 class Performance:

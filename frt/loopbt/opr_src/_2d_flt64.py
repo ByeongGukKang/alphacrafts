@@ -61,7 +61,9 @@ def nanstd(mat, axis) -> nb.float64[::1]:
 
 @nb.jit(
     nb.float64[::1](nb.float64[:,::1], nb.bool_),
-    locals = {'res':nb.float64[::1],'i':nb.int64},
+    locals = {
+        'res':nb.float64[::1],'i':nb.int64
+    },
     boundscheck = False,
     cache = True,
     nopython = True
@@ -86,7 +88,9 @@ def nanmin(mat, axis) -> nb.float64[::1]:
 
 @nb.jit(
     nb.float64[::1](nb.float64[:,::1], nb.bool_),
-    locals = {'res':nb.float64[::1],'i':nb.int64},
+    locals = {
+        'res':nb.float64[::1],'i':nb.int64
+    },
     boundscheck = False,
     cache = True,
     nopython = True
@@ -107,6 +111,61 @@ def nanmax(mat, axis) -> nb.float64[::1]:
         res = np.empty(mat.shape[1])
         for i in range(mat.shape[1]):
             res[i] = np.nanmax(mat[:,i])
+    return res
+
+@nb.jit(
+    nb.float64[::1](nb.float64[:,::1], nb.bool_, nb.float64),
+    locals = {
+        'res':nb.float64[::1],'i':nb.int64
+    },
+    boundscheck = False,
+    cache = True,
+    nopython = True
+)
+def nanpercentile(mat, axis, hurdle) -> nb.float64[::1]:
+    """Compiled nanpercentile function for 2D array
+
+    Args:
+        mat (nb.float64[:,::1])
+        axis (nb.bool_): 0 for row, 1 for column
+        hurdle (nb.float64): percentile value
+
+    """
+    if axis:
+        res = np.empty(mat.shape[0])
+        for i in range(mat.shape[0]):
+            res[i] = np.nanpercentile(mat[i,:], hurdle)
+    else:
+        res = np.empty(mat.shape[1])
+        for i in range(mat.shape[1]):
+            res[i] = np.nanpercentile(mat[:,i], hurdle)
+    return res
+
+@nb.jit(
+    nb.float64[::1](nb.float64[:,::1], nb.bool_),
+    locals = {
+        'res':nb.float64[::1],'i':nb.int64
+    },
+    boundscheck = False,
+    cache = True,
+    nopython = True
+)
+def nansum(mat, axis) -> nb.float64[::1]:
+    """Compiled nansum function for 2D array
+
+    Args:
+        mat (nb.float64[:,::1])
+        axis (nb.bool_): 0 for row, 1 for column
+
+    """
+    if axis:
+        res = np.empty(mat.shape[0])
+        for i in range(mat.shape[0]):
+            res[i] = np.nansum(mat[i,:])
+    else:
+        res = np.empty(mat.shape[1])
+        for i in range(mat.shape[1]):
+            res[i] = np.nansum(mat[:,i])
     return res
 
 ###### Complied Operations ######
@@ -204,4 +263,78 @@ def rank_pct(mat, axis, method) -> nb.float64[:,::1]:
     else:
         for i in range(mat.shape[1]):
             res[:,i] = _1d_flt64.rank_pct(mat[:,i].flatten(), method)
+    return res
+
+@nb.jit(
+    nb.float64[:,::1](nb.float64[:,::1], nb.bool_, nb.float64),
+    locals = {'res':nb.float64[:,::1], 'i':nb.int64},
+    boundscheck = False,
+    cache = True,
+    nopython = True
+)
+def winsor_by_zscore(mat, axis, hurdle) -> nb.float64[:,::1]:
+    """Winsorization by Z-score
+
+    Args:
+        mat (np.float64[:,::1])
+        axis (bool): 0 for row, 1 for column
+        hurdle (float): Z-score value
+
+    """
+    res = np.empty(mat.shape, dtype=np.float64)
+    if axis:
+        for i in range(mat.shape[0]):
+            res[i,:] = _1d_flt64.winsor_by_zscore(mat[i,:], hurdle)
+    else:
+        for i in range(mat.shape[1]):
+            res[:,i] = _1d_flt64.winsor_by_zscore(mat[:,i].flatten(), hurdle)
+    return res
+
+@nb.jit(
+    nb.float64[:,::1](nb.float64[:,::1], nb.bool_, nb.float64),
+    locals = {'res':nb.float64[:,::1], 'i':nb.int64},
+    boundscheck = False,
+    cache = True,
+    nopython = True
+)
+def winsor_by_percentile(mat, axis, hurdle) -> nb.float64[:,::1]:
+    """Winsorization by Percentile
+
+    Args:
+        mat (np.float64[:,::1])
+        axis (bool): 0 for row, 1 for column
+        hurdle (float): percentile value
+
+    """
+    res = np.empty(mat.shape, dtype=np.float64)
+    if axis:
+        for i in range(mat.shape[0]):
+            res[i,:] = _1d_flt64.winsor_by_percentile(mat[i,:], hurdle)
+    else:
+        for i in range(mat.shape[1]):
+            res[:,i] = _1d_flt64.winsor_by_percentile(mat[:,i].flatten(), hurdle)
+    return res
+
+@nb.jit(
+    nb.float64[:,::1](nb.float64[:,::1], nb.bool_),
+    locals = {'res':nb.float64[:,::1], 'i':nb.int64},
+    boundscheck = False,
+    cache = True,
+    nopython = True
+)
+def softmax(mat, axis) -> nb.float64[:,::1]:
+    """Softmax Normalization
+
+    Args:
+        mat (np.float64[:,::1])
+        axis (bool): 0 for row, 1 for column
+
+    """
+    res = np.empty(mat.shape, dtype=np.float64)
+    if axis:
+        for i in range(mat.shape[0]):
+            res[i,:] = _1d_flt64.softmax(mat[i,:])
+    else:
+        for i in range(mat.shape[1]):
+            res[:,i] = _1d_flt64.softmax(mat[:,i].flatten())
     return res

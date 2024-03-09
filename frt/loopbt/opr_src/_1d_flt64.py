@@ -68,7 +68,7 @@ def rank(arr: nb.float64[::1], method: nb.types.unicode_type) -> nb.float64[::1]
     else:
         non_nan_arr = non_nan_arr[sorter]
         # obs = np.r_[True, non_nan_arr[1:] != non_nan_arr[:-1]]
-        obs = np.concatenate((np.array([True]), non_nan_arr[1:] != non_nan_arr[:-1]))
+        obs = np.concatenate((np.array([True]), non_nan_arr[1:] != non_nan_arr[:non_nan_arr.shape[0] -1]))
         dense = obs.cumsum()[sorter]
 
         if method == 'dense':
@@ -83,7 +83,7 @@ def rank(arr: nb.float64[::1], method: nb.types.unicode_type) -> nb.float64[::1]
             elif method == 'min':
                 res[~nan_mask] = count[dense - 1] + 1
             elif method == 'average':
-                res[~nan_mask] = .5 * (count[dense] + count[dense - 1] + 1)
+                res[~nan_mask] = 0.5 * (count[dense] + count[dense - 1] + 1)
             else:
                 raise Exception("ValueError: Unknown argument for parameter 'method'")
 
@@ -184,4 +184,4 @@ def softmax(arr) -> nb.float64[::1]:
 
     """
     exp_arr = np.exp(arr)
-    return exp_arr / np.nansum(exp_arr)
+    return exp_arr / np.nansum(exp_arr) 
