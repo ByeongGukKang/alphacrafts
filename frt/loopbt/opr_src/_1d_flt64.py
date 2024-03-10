@@ -1,6 +1,117 @@
 import numba as nb
 import numpy as np
 
+
+### Complied Numpy Functions ###
+@nb.jit(
+    nb.float64(nb.float64[::1], ),
+    boundscheck = False,
+    cache = True,
+    nopython = True
+)
+def nanmean(arr) -> nb.float64:
+    """Compiled nanmean function for 1D array
+
+    Args:
+        arr (nb.float64[::1])
+
+    """
+    return np.nanmean(arr)
+
+@nb.jit(
+    nb.float64(nb.float64[::1], ),
+    boundscheck = False,
+    cache = True,
+    nopython = True
+)
+def nanstd(arr) -> nb.float64:
+    """Compiled nanstd function for 1D array
+
+    Args:
+        arr (nb.float64[:,::1])
+
+    """
+    return np.nanstd(arr)
+
+@nb.jit(
+    nb.float64(nb.float64[::1], ),
+    boundscheck = False,
+    cache = True,
+    nopython = True
+)
+def nanmin(arr) -> nb.float64:
+    """Compiled nanmin function for 1D array
+
+    Args:
+        arr (nb.float64[::1])
+
+    """
+    return np.nanmin(arr)
+
+@nb.jit(
+    nb.float64(nb.float64[::1], ),
+    boundscheck = False,
+    cache = True,
+    nopython = True
+)
+def nanmax(arr) -> nb.float64:
+    """Compiled nanmax function for 1D array
+
+    Args:
+        arr (nb.float64[:,::1])
+
+    """
+    return np.nanmax(arr)
+
+@nb.jit(
+    nb.float64(nb.float64[::1], nb.float64),
+    boundscheck = False,
+    cache = True,
+    nopython = True
+)
+def nanpercentile(arr, hurdle) -> nb.float64[::1]:
+    """Compiled nanpercentile function for 1D array
+
+    Args:
+        arr (nb.float64[::1])
+        hurdle (nb.float64): percentile value
+
+    """
+    return np.nanpercentile(arr, hurdle)
+
+@nb.jit(
+    nb.float64(nb.float64[::1], ),
+    boundscheck = False,
+    cache = True,
+    nopython = True
+)
+def nansum(arr) -> nb.float64:
+    """Compiled nansum function for 1D array
+
+    Args:
+        arr (nb.float64[::1])
+
+    """
+    return np.nansum(arr)
+
+@nb.jit(
+    nb.bool_[::1](nb.float64[::1], ),
+    boundscheck = False,
+    cache = True,
+    nopython = True
+)
+def isnan(arr) -> nb.float64:
+    """Compiled isnan function for 1D array
+
+    Args:
+        arr (nb.float64[::1])
+
+    """
+    return np.isnan(arr)
+
+
+
+###### Complied Operations ######
 @nb.jit(
     nb.float64[::1](nb.float64[::1], ),
     boundscheck = False,

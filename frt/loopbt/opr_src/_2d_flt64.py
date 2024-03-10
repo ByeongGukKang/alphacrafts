@@ -23,11 +23,11 @@ def nanmean(mat, axis) -> nb.float64[::1]:
 
     """
     if axis:
-        res = np.empty(mat.shape[0])
+        res = np.empty(mat.shape[0], dtype=np.float64)
         for i in range(mat.shape[0]):
             res[i] = np.nanmean(mat[i,:])
     else:
-        res = np.empty(mat.shape[1])
+        res = np.empty(mat.shape[1], dtype=np.float64)
         for i in range(mat.shape[1]):
             res[i] = np.nanmean(mat[:,i])
     return res
@@ -50,11 +50,11 @@ def nanstd(mat, axis) -> nb.float64[::1]:
 
     """
     if axis:
-        res = np.empty(mat.shape[0])
+        res = np.empty(mat.shape[0], dtype=np.float64)
         for i in range(mat.shape[0]):
             res[i] = np.nanstd(mat[i,:])
     else:
-        res = np.empty(mat.shape[1])
+        res = np.empty(mat.shape[1], dtype=np.float64)
         for i in range(mat.shape[1]):
             res[i] = np.nanstd(mat[:,i])
     return res
@@ -77,11 +77,11 @@ def nanmin(mat, axis) -> nb.float64[::1]:
 
     """
     if axis:
-        res = np.empty(mat.shape[0])
+        res = np.empty(mat.shape[0], dtype=np.float64)
         for i in range(mat.shape[0]):
             res[i] = np.nanmin(mat[i,:])
     else:
-        res = np.empty(mat.shape[1])
+        res = np.empty(mat.shape[1], dtype=np.float64)
         for i in range(mat.shape[1]):
             res[i] = np.nanmin(mat[:,i])
     return res
@@ -104,11 +104,11 @@ def nanmax(mat, axis) -> nb.float64[::1]:
 
     """
     if axis:
-        res = np.empty(mat.shape[0])
+        res = np.empty(mat.shape[0], dtype=np.float64)
         for i in range(mat.shape[0]):
             res[i] = np.nanmax(mat[i,:])
     else:
-        res = np.empty(mat.shape[1])
+        res = np.empty(mat.shape[1], dtype=np.float64)
         for i in range(mat.shape[1]):
             res[i] = np.nanmax(mat[:,i])
     return res
@@ -132,11 +132,11 @@ def nanpercentile(mat, axis, hurdle) -> nb.float64[::1]:
 
     """
     if axis:
-        res = np.empty(mat.shape[0])
+        res = np.empty(mat.shape[0], dtype=np.float64)
         for i in range(mat.shape[0]):
             res[i] = np.nanpercentile(mat[i,:], hurdle)
     else:
-        res = np.empty(mat.shape[1])
+        res = np.empty(mat.shape[1], dtype=np.float64)
         for i in range(mat.shape[1]):
             res[i] = np.nanpercentile(mat[:,i], hurdle)
     return res
@@ -159,14 +159,29 @@ def nansum(mat, axis) -> nb.float64[::1]:
 
     """
     if axis:
-        res = np.empty(mat.shape[0])
+        res = np.empty(mat.shape[0], dtype=np.float64)
         for i in range(mat.shape[0]):
             res[i] = np.nansum(mat[i,:])
     else:
-        res = np.empty(mat.shape[1])
+        res = np.empty(mat.shape[1], dtype=np.float64)
         for i in range(mat.shape[1]):
             res[i] = np.nansum(mat[:,i])
     return res
+
+@nb.jit(
+    nb.bool_[:,::1](nb.float64[:,::1], nb.bool_),
+    boundscheck = False,
+    cache = True,
+    nopython = True
+)
+def isnan(mat, axis) -> nb.bool_[:,::1]: # here axis is dummy (not used)
+    """Compiled isnan function for 2D array
+
+    Args:
+        mat (nb.float64[:,::1])
+
+    """
+    return np.isnan(mat)
 
 ###### Complied Operations ######
 @nb.jit(
