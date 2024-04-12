@@ -115,7 +115,8 @@ class SubscribeParent(metaclass=ABCMeta):
     def __init__(self):
         pass
 
-    @abstractclassmethod
+    @classmethod
+    @abstractmethod
     def subscribe(cls, key:str, input_dict:dict):
         """
         Define as classmethod \n
